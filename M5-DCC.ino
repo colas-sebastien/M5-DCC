@@ -14,6 +14,7 @@
     La centrale dispose de son propre point d'acces Wifi integre.
 
     historique:
+    - 2024/12/06: Sébastien Colas      Portage vers M5atom + TF-Card-Reader, ajout du support de mDNS, Serveur Web sur Core 0, Correction bug Upload de fichier
     - 2021/12/04: Ulysse Delmas-Begue  Si une page web est demandee hors AU, propose de passer en AU    
     - 2020/10/19: Ulysse Delmas-Begue  Mise en ligne, Activation par defaut des souris html
     - 2020/04/27: Ulysse Delmas-Begue  Possibilité de choisir le mode analogique/dcc independament de l'utilisation de l'adresse analogique par une souris
@@ -181,9 +182,15 @@
 */
 
 
-#include <ESP8266WiFi.h>
-
-
+#include <M5Atom.h>
+#include <WiFi.h>
+#include <ESPmDNS.h>
+#include <WebServer.h>         // HTTP server
+#include <FS.h>                // File System support
+#include <SPIFFS.h>            // SPIFFS filesystem
+#include <SPI.h>               // Needed by TFCard for M5Atom
+#include <SD.h>                // Needed by TFCard for M5Atom
+#include <WebSocketsServer.h>  // Websockets server
 
 //==============================================================================================
 //     USER PART
@@ -210,8 +217,13 @@
     #define SUBNET    (255, 255, 255, 0)
 #endif
 
+// Setting hostname
+#if USE_WIFI == 1
+  const char hostname[] = "centrale-d17";
+#endif
+
 // TCP Server configuration
-#define USE_TCP 1             // 1 pour activer le serveur TCP d'origine de D17 (pour les souris RFO basic, mini cab et potentiomètriques) 
+#define USE_TCP 0             // 1 pour activer le serveur TCP d'origine de D17 (pour les souris RFO basic, mini cab et potentiomètriques) 
 int tcp_port = 1234;
 
 // Support du HTTP et websockets
@@ -238,8 +250,8 @@ int tcp_port = 1234;
                               // (ex: 12V * 100% = 12V, 15V * 80% = 12V, 18V * 67% = 12V)
 // dcc & analog modes
 #define USER_DCC_OK  1        // 0 ne jamais utiliser le DCC, 1 ok pour utiliser le DCC
-#define USER_ANA_OK  1        // 0 ne jamais utiliser l'analogique, 1 ok pour utilise l'analogique
-#define USER_ACC_ANA 1        // commande des accessoires en analogique: 0 ne pas commander, 1 commander sans le booster, 2 commander avec le booster
+#define USER_ANA_OK  0        // 0 ne jamais utiliser l'analogique, 1 ok pour utilise l'analogique
+#define USER_ACC_ANA 0        // commande des accessoires en analogique: 0 ne pas commander, 1 commander sans le booster, 2 commander avec le booster
 #define USER_ANA_ADR_WS 0     // 1 = L'utilisation de l'adresse analogique par au moins une souris html fait passer la centrale automatiquement an analogique
                               // 0 = La souris doit envoyer une demande de changement de mode pour changer de mode (l'utilisateur appuie sur le bouton ANA/DCC)
 #define USER_ANA_ADR_TCP 1    // idem pour les souris tcp (laisser a 1 pour la compatibilite avec les souris tcp actuelles qui ne disposent pas du bouton ANA/DCC)                              
@@ -260,7 +272,7 @@ int tcp_port = 1234;
 /* 3. Others */
 
 // configuration des entrees/sorties
-#define USER_USE_S88  1       // 1 to use S88 IN     (out D0, D5, D1, D8 no more available)
+#define USER_USE_S88  0       // 1 to use S88 IN     (out D0, D5, D1, D8 no more available)
 #define USER_USE_MAX  0       // 1 to use MAX7219/21 (out D0, D5, D4     no more available) (la led etant sur D4 clignote en permanence) 
 #define USER_USE_PCA  0       // 1 to use PCA9685    (out D6, D7         no more available)
 #define USER_CLI_LED_MAX -1   // indicate which LED of MAX should blink to indicate sign of life (-1 not used)
@@ -473,23 +485,24 @@ void user_ds_acc(int acc1_320, byte val0_1)
 #define BOOST_ANA 1
 
 // pins
-#define S_PIN D3
-#define P_PIN D2
+#define S_PIN   G32         // Grove port Yellow cable
+#define P_PIN   G26         // Grove port White cable
 #define DCC_PIN S_PIN
 
-#define LED_PIN LED_BUILTIN //D4
+// #define LED_PIN LED_BUILTIN //D4
 
-#define CLK_PIN  D5
-#define DAT_PIN  D0
-#define LLED_PIN D4
-#define LDIN_PIN D1
-#define RST_PIN  D8
-#define SCK_PIN  D7
-#define SDA_PIN  D6
+#define CLK_PIN  0
+#define DAT_PIN  0
+#define LLED_PIN 0
+#define LDIN_PIN 0
+#define RST_PIN  0
+#define SCK_PIN  0
+#define SDA_PIN  0
 
-#define AU_PIN   D5   //can be used in // of CLK_PIN & OUT PIN (with small glitch for OUT)
+#define AU_PIN   0   //can be used in // of CLK_PIN & OUT PIN (with small glitch for OUT)
 
-
+// Set To 0 to disable the sensor
+#define ANALOG_SENSOR 0
 
 //------------------------------------------------------------------------------
 // DIRECT OUT (7)
@@ -740,7 +753,7 @@ void led_init(void)
     led_maj();
 }
 
-
+/*
 void led_sign_of_life(byte val)
 {
     #if USER_USE_MAX == 0
@@ -753,7 +766,12 @@ void led_sign_of_life(byte val)
         #endif
     #endif
 }
+*/
 
+void led_rgb_sign_of_life(CRGB color)
+{
+  M5.dis.drawpix(0,color);
+}
 
 
 //------------------------------------------------------------------------------
@@ -1803,14 +1821,14 @@ void booster_maj(void)
 
     if(boost != oldboost)
     {
-        if(oldboost == BOOST_ANA) { analogWriteFreq(50); analogWrite(P_PIN, 0);}
+        if(oldboost == BOOST_ANA) { analogWriteFrequency(50); analogWrite(P_PIN, 0);}
         oldboost = boost;
         if(boost == BOOST_ANA)
         {
             #if USB_MODE == 1
                 Serial.println("BOOST ANA");
             #endif
-            analogWriteFreq(20000);
+            analogWriteFrequency(20000);
             analogWrite(P_PIN, 0);
         }
         if(boost == BOOST_DCC)
@@ -2334,7 +2352,7 @@ void parse_rx(byte cclient, char* rx, byte is_websocket = 0)
             if(cmd == 'd') cv_dat = (byte) nbi;
             if(cmd == 'p') if(nbi == CV_PROG_CODE) if(boost == BOOST_DCC)
             {
-                led_sign_of_life(1); //LED ON
+                led_rgb_sign_of_life(0x00ff00); //LED ON Green
                 #if USB_MODE == 1
                     Serial.printf(tx, "prog cv%d=%d\n", cv_adr, cv_dat); // tx globale sinon marche pas
                 #endif
@@ -2343,7 +2361,7 @@ void parse_rx(byte cclient, char* rx, byte is_websocket = 0)
                 // disable booster during 1s to reboot decoder
                 digitalWrite(P_PIN, LOW);
                 digitalWrite(S_PIN, LOW);
-                led_sign_of_life(0);
+                led_rgb_sign_of_life(0);
                 delay(1000); //UU: possible to check with can
                 digitalWrite(P_PIN, HIGH);
                 #if USB_MODE == 1
@@ -2585,6 +2603,29 @@ void parse_rx(byte cclient, char* rx, byte is_websocket = 0)
 //----------------------------------------------------------------------------------
 #if USE_WIFI == 1
 
+void start_mdns_service()
+{
+    //initialize mDNS service
+    esp_err_t err = mdns_init();
+    if (err) {
+        #if USB_MODE == 1
+            Serial.print("MDNS Init failed\n");
+        #endif
+        return;
+    }
+
+    //set hostname
+    mdns_hostname_set(hostname);
+    //set default instance
+    mdns_instance_name_set(hostname);
+    #if USB_MODE == 1
+        String msg="MDNS Started with hostname: ";
+        msg+=hostname;
+        Serial.println(msg);
+    #endif
+
+}
+
 void wifi_init(void)
 {
 #if APMODE
@@ -2608,6 +2649,7 @@ void wifi_init(void)
     #if USB_MODE == 1
         Serial.print("D17 IP address: "); Serial.println(myIP);
     #endif
+    start_mdns_service();
 }
 
 #endif
@@ -3155,13 +3197,13 @@ void desktop_station_process(void)
     else if(!strncmp(ds_serial_cmd, "setLocoConfig", 13) && ds_arg_nb == 3)
     {
         // sequence de programmation dcc
-        led_sign_of_life(1); //LED ON
+        led_rgb_sign_of_life(0xfff000); //LED ON Yellow
         // programing seqeunce
         prog_cv(ds_arg[1], ds_arg[2]);  // cv_adr, cv_dat
         // disable booster during 1s to reboot decoder
         digitalWrite(P_PIN, LOW);
         digitalWrite(S_PIN, LOW);
-        led_sign_of_life(0);
+        led_rgb_sign_of_life(0);
         delay(1000); //UU: possible to check with can
         digitalWrite(P_PIN, HIGH);
     }
@@ -3228,15 +3270,9 @@ void parse_usb_desktop_station(void)
 #if USE_WIFI == 1
 #if USE_HTTP == 1
 
-//#include <ESP8266WiFi.h>     // already included
-#include <ESP8266mDNS.h>
-#include <ESP8266WebServer.h>  // HTTP server
-#include <FS.h>                // SPIFFS filesystem
-#include <WebSocketsServer.h>  // Websockets server
-
-ESP8266WebServer httpServer(80); // Create a webserver object that listens for HTTP request on port 80
+WebServer httpServer(80); // Create a webserver object that listens for HTTP request on port 80
 WebSocketsServer webSocketServer = WebSocketsServer(81); // Create a webSocketServer object that listens for request on port 81
-FS* filesystem = &SPIFFS;   // on peut aussi s'en passer et utiliser FS.
+FS* filesystem;   // on peut aussi s'en passer et utiliser FS.
 
 #define DBG Serial
 
@@ -3248,7 +3284,53 @@ void log(char* str)
 }
 
 
-// A. SPIFFS
+// A. SPIFFS & SDCARD
+
+// Listing directory. 
+void listDir(const char *dirname, uint8_t levels) {
+
+    if (filesystem==&SD)
+    {
+      DBG.println("File System Type: SD");
+    }
+    else if (filesystem==&SPIFFS)
+    {
+      DBG.println("File System Type: SPIFFS");
+    }
+    else
+    {
+      DBG.println("File System Type: UNKNOWN");
+    }
+
+    DBG.printf("Listing directory: %s\n", dirname);
+
+    File root = filesystem->open(dirname);
+    if (!root) {
+        DBG.println("Failed to open directory");
+        return;
+    }
+    if (!root.isDirectory()) {
+        DBG.println("Not a directory");
+        return;
+    }
+
+    File file = root.openNextFile();
+    while (file) {
+        if (file.isDirectory()) {
+            DBG.print("  DIR : ");
+            DBG.println(file.name());
+            if (levels) {
+                listDir(file.name(), levels - 1);
+            }
+        } else {
+            DBG.print("  FILE: ");
+            DBG.print(file.name());
+            DBG.print("  SIZE: ");
+            DBG.println(file.size());
+        }
+        file = root.openNextFile();
+    }
+}
 
 String formatBytes(size_t bytes)
 {
@@ -3258,27 +3340,45 @@ String formatBytes(size_t bytes)
   else return String(bytes / 1024.0 / 1024.0 / 1024.0) + "GB";
 }
 
+bool startSDCard()
+{
+  SPI.begin(23, 33, 19, -1);
+  if (!SD.begin(-1, SPI, 10000000)) {
+      log("SD Card Mount Failed\n");
+      return false;
+  }
+  uint8_t cardType = SD.cardType();
+
+  if (cardType == CARD_NONE) {
+      log("No SD card attached\n");
+      return false;
+  }
+  log("SDCard detected.\n");
+  filesystem = &SD;
+
+  return true;
+}
+
 void startSPIFFS(void) { // Start the SPIFFS and list all contents
   SPIFFS.begin(); // Start the SPI Flash File System (SPIFFS)
   log("SPIFFS started.\n");
+  filesystem = &SPIFFS;
+}
+
+void startFS()
+{
+  if (!startSDCard())         // Detect if SDCard is present
+  {
+    startSPIFFS();
+  }
+
   #if USB_MODE == 1
   log("Files:\n");
   {
-    Dir dir = SPIFFS.openDir("/");
-    while (dir.next()) {                      // List the file system contents
-      String fileName = dir.fileName();
-      size_t fileSize = dir.fileSize();
-      DBG.printf(" %s (%s)\n", fileName.c_str(), formatBytes(fileSize).c_str());
-    }
+    listDir("/", 0);
   }
-  FSInfo fs_info;
-  SPIFFS.info(fs_info);
-  float fileTotalKB = (float)fs_info.totalBytes / 1024.0; 
-  float fileUsedKB = (float)fs_info.usedBytes / 1024.0; 
-  DBG.print("Total : "); Serial.print(fileUsedKB); DBG.print("/"); Serial.print(fileTotalKB); Serial.println(" KB");
-  #endif
+  #endif  
 }
-
 
 // B. Websocket
 #define WStype_t byte
@@ -3344,20 +3444,6 @@ void startWebSocket(void)
 // C. HTTP
 
 // ex si page HTML en static
-const char index_html[] PROGMEM = R"rawliteral(
-<!DOCTYPE HTML><html>
-<head>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-</head>
-<body>
-  <h2>D17 Web Server test</h2>
-  <img src="canvas.png">
-</body>  
-</html>)rawliteral";
-
-const char ok_html[] PROGMEM = R"rawliteral(
-<html><body>OK</body></html>
-)rawliteral";
 
 const char ok_au1[] PROGMEM = R"rawliteral(
 <html><body>PWR is OFF (AU=1)<br><br><a href="index.html">index</a><br><br><a href="admin.html">admin</a><br><br><a href="au0">PWR_ON (AU=0)</a></body></html>
@@ -3374,10 +3460,10 @@ const char ask_go_au[] PROGMEM = R"rawliteral(
 // convert the file extension to the MIME type
 String getContentType(String filename) 
 { 
-    if (filename.endsWith(".html")) return "text/html";
+    if (filename.endsWith(".html"))     return "text/html";
     else if (filename.endsWith(".htm")) return "text/html";
     else if (filename.endsWith(".css")) return "text/css";
-    else if (filename.endsWith(".js")) return "application/javascript";
+    else if (filename.endsWith(".js"))  return "application/javascript";
     else if (filename.endsWith(".ico")) return "image/x-icon";
     else if (filename.endsWith(".png")) return"image/png";
     else if (filename.endsWith(".gif")) return "image/gif";
@@ -3426,9 +3512,9 @@ bool handleFileRead(String path)
     if (path.endsWith("/")) path += "index.html"; // If a folder is requested, send the index file
     String contentType = getContentType(path); // Get the MIME type
 
-    if (SPIFFS.exists(path)) // If the file exists
+    if (filesystem->exists(path)) // If the file exists
     { 
-        File file = SPIFFS.open(path, "r"); // Open it
+        File file = filesystem->open(path, "r"); // Open it
         size_t sent = httpServer.streamFile(file, contentType); // And send it to the client
         file.close(); // Then close the file again
         return true;
@@ -3436,11 +3522,11 @@ bool handleFileRead(String path)
     DBG.println("\tFile Not Found");
     return false; // If the file doesn't exist, return false
 }
-
-// upload a new file to the SPIFFS
-File fsUploadFile;    // File object to temporarily store the received file  (so no // upload)
+File fsUploadFile; 
+// upload a new file to the SPIFFS/SD
 void handleFileUpload() 
 {
+       // File object to temporarily store the received file  (so no // upload)
     if(au == 0)  // handle only in AU mode
     { 
         #if USB_MODE == 1
@@ -3450,7 +3536,6 @@ void handleFileUpload()
         return;
     }
     
-    log("**\n");
     HTTPUpload& upload = httpServer.upload();
     if(upload.status == UPLOAD_FILE_START)
     {
@@ -3459,15 +3544,29 @@ void handleFileUpload()
         #if USB_MODE == 1
         DBG.print("handleFileUpload Name: "); DBG.println(filename);
         #endif
-        fsUploadFile = SPIFFS.open(filename, "w"); // Open the file for writing in SPIFFS (create if it doesn't exist)
-        filename = String();        
+        fsUploadFile = filesystem->open(filename, "w"); // Open the file for writing in FS (create if it doesn't exist)                
     }
     else if(upload.status == UPLOAD_FILE_WRITE)
     {
         if(fsUploadFile) fsUploadFile.write(upload.buf, upload.currentSize); // Write the received bytes to the file
+        #if USB_MODE == 1
+        DBG.print("=");
+        #endif
+
     }
     else if(upload.status == UPLOAD_FILE_END)
     {
+        #if USB_MODE == 1
+        if(fsUploadFile)
+        {
+          DBG.println("> OK");
+        }
+        else
+        {
+          DBG.println("> KO");
+        }        
+        #endif
+
         if(fsUploadFile) // If the file was successfully created
         {
             fsUploadFile.close();
@@ -3509,15 +3608,16 @@ void replyFileList()  // OLD
         return;
     }
 
-    //String rsp = "<!DOCTYPE HTML><html><head>Files</head><body><h2>SPIFFS Files</h2><br>";
-    String rsp = "<html><head>Files</head><body><h2>SPIFFS Files</h2><br>";
+    String rsp = "<html><head>Files</head><body><h2>FS Files</h2><br>";
 
-    Dir dir = SPIFFS.openDir("/");
-    while (dir.next()) {
-      String fileName = dir.fileName();
-      size_t fileSize = dir.fileSize();      
+    File dir = filesystem->open("/");
+    File file = dir.openNextFile();
+    while (file) {
+      String fileName = dir.name();
+      size_t fileSize = dir.size();      
       rsp += "FS File " + fileName + ", size " + formatBytes(fileSize) + "<BR>";
       fileName = String(); 
+      File file = dir.openNextFile();
     }
 
     rsp += "</body></html>";
@@ -3538,26 +3638,29 @@ void replyFileList2()   // ACTUAL but need to limit string size ...
         //httpServer.send(404, "text/plain", "404: Not Found");
         return;
     }
+    String rsp = "<html><head>Files</head><body><h2>FS Files</h2><br><ul>";
 
-    String rsp = "<html><head>Files</head><body><h2>SPIFFS Files</h2><br><ul>";
-
-    Dir dir = SPIFFS.openDir("/");
-    while (dir.next()) 
+    File dir = filesystem->open("/");
+    File file = dir.openNextFile();
+    String host = hostname;
+    while (file) 
     {
-      String fileName = dir.fileName();
-      size_t fileSize = dir.fileSize();      
-      rsp += "<li><a href=\"http://192.168.4.1" + fileName + "\">" + fileName + ", size " + formatBytes(fileSize) + "</a></li>";
+      String fileName = dir.name();
+      size_t fileSize = dir.size();      
+      rsp += "<li><a href=\"http://" + host + ".local/" + fileName + "\">" + fileName + ", size " + formatBytes(fileSize) + "</a></li>";
       fileName = String(); 
+      File file = dir.openNextFile();
     }
     rsp += "</ul>";
     
+    /*
     FSInfo fs_info;
     SPIFFS.info(fs_info);
     float fileTotalKB = (float)fs_info.totalBytes / 1024.0; 
     float fileUsedKB = (float)fs_info.usedBytes / 1024.0; 
     rsp += "Total KB: " + String(fileTotalKB,0) + " KB<BR>";
     rsp += " Used KB: " + String(fileUsedKB,0) + " KB<BR>";
-
+    */
     rsp += "</body></html>";
     #if USB_MODE == 1
     DBG.println("reply: " + rsp);
@@ -3582,22 +3685,22 @@ void handleFileList()  // try the JSON ...
   #if USB_MODE == 1
   DBG.println("handleFileList: " + path);
   #endif
-  Dir dir = filesystem->openDir(path);
+  File dir = filesystem->open(path);
+  File file = dir.openNextFile();
   path = String();
 
   String output = "[";
-  while (dir.next())
+  while (file)
   {
-    File entry = dir.openFile("r");
     if (output != "[") output += ',';
-    
-    bool isDir = false;
+  
     output += "{\"type\":\"";
-    output += (isDir) ? "dir" : "file";
+    output += "file";
     output += "\",\"name\":\"";
-    if (entry.name()[0] == '/') output += &(entry.name()[1]); else  output += entry.name();
+    output += file.name();
     output += "\"}";
-    entry.close();
+
+    file = dir.openNextFile();
   }
 
   output += "]";
@@ -3642,18 +3745,12 @@ void startWebServer()
         String json = "{";
         json += "\"vers\":" + String(CENTRAL_NAME);
         json += "\"heap\":" + String(ESP.getFreeHeap());
-        json += ", \"analog\":" + String(analogRead(A0));
-        json += ", \"gpio\":" + String((uint32_t)(((GPI | GPO) & 0xFFFF) | ((GP16I & 0x01) << 16)));
+        json += ", \"analog\":" + String(analogRead(ANALOG_SENSOR));
+        //json += ", \"gpio\":" + String((uint32_t)(((GPI | GPO) & 0xFFFF) | ((GP16I & 0x01) << 16)));
         json += ", \"au\":" + String(au);
         json += "}";
         httpServer.send(200, "text/json", json);
         json = String();
-    });
-    
-    // ex avec une chaine dans le programme (juste pour tester)
-    httpServer.on("/ii", HTTP_GET, []()    // internal index
-    {
-        httpServer.send(200, "text/html", index_html);  //envoie la chaine definit dans ce fichier
     });
     
     // Direct AU
@@ -3662,7 +3759,8 @@ void startWebServer()
     
     httpServer.begin(); // start the server
     #if USB_MODE == 1
-    DBG.println("HTTP server started.");
+    //DBG.print("HTTP server started on Core ");
+    //DBG.println(xPortGetCoreID());
     #endif
 }
 
@@ -3670,16 +3768,36 @@ void startWebServer()
 
 // D. setup / loop
 
+void startWebServerOnCore( void * pvParameters ){
+  startFS();
+  startWebServer();
+
+  for(;;){
+    httpServer.handleClient();
+    delay(2);
+  } 
+}
+
+TaskHandle_t Task1;
+
 void http_setup(void)
 {
-    startSPIFFS();     // UU: sortir le SPIFFS
-    startWebSocket();
-    startWebServer();
+   //startFS();  
+   startWebSocket();
+   //startWebServer();
+  xTaskCreatePinnedToCore(
+                  startWebServerOnCore,     // Task function.
+                  "WebServer",              // name of task. 
+                  10000,                    // Stack size of task 
+                  NULL,                     // parameter of the task 
+                  1,                        // priority of the task 
+                  &Task1,                   // Task handle to keep track of created task
+                  (((int)xPortGetCoreID() + 1) % 2));  // Running on a different Core 
 }
 
 void http_loop(void)
 {
-    httpServer.handleClient();
+    //httpServer.handleClient();
     webSocketServer.loop();
 }
 
@@ -3715,10 +3833,14 @@ unsigned long time0;
 
 void setup()
 {
+    M5.begin(true, false, true);
+    delay(50);
+    M5.dis.drawpix(0, 0xfff000);    // RGB LED Yellow at startup    
+    
     // pins init
     pinMode(P_PIN,   OUTPUT); digitalWrite(P_PIN,   LOW);  // D2
     pinMode(S_PIN,   OUTPUT); digitalWrite(S_PIN,   LOW);  // D3
-    pinMode(LED_PIN, OUTPUT); digitalWrite(LED_PIN,HIGH);  // D4 LED active low, also LLED_PIN
+    // pinMode(LED_PIN, OUTPUT); digitalWrite(LED_PIN,HIGH);  // D4 LED active low, also LLED_PIN
     pinMode(DAT_PIN, OUTPUT); digitalWrite(DAT_PIN, LOW);  // D0
     pinMode(CLK_PIN, OUTPUT); digitalWrite(CLK_PIN, LOW);  // D5
     pinMode(LDIN_PIN,OUTPUT); digitalWrite(LDIN_PIN,LOW);  // D1
@@ -3736,6 +3858,8 @@ void setup()
         Serial.print("\n\n\nHello from ");
         strcpy(tx,CENTRAL_NAME); // passer par tx
         Serial.println(tx);
+        //Serial.print(" on Core ");
+        //Serial.println(xPortGetCoreID());
     #endif
     #if USB_MODE == 2
         Serial.print("<iDCC++ "); Serial.print(CENTRAL_NAME); Serial.print(" ***>");
@@ -3799,10 +3923,6 @@ void loop()
     byte index = 0;
     unsigned long time1;
 
-    #if USB_MODE == 1
-        //Serial.print("*");
-    #endif
-
     // 1. GESTION DES CLIENTS
 
     // 1.a. GESTION DES CLIENTS TCP
@@ -3852,16 +3972,33 @@ void loop()
     // 4. CLIGNOTEMENT DE LA LED (Sign of life)
     if(!au) // lent 0.5Hz
     {
-        if(cpt_250ms & 4) led_sign_of_life(1); else led_sign_of_life(0);
+        if(cpt_250ms & 4) 
+        {
+          led_rgb_sign_of_life(0x00ff00);  // GREEN
+        }
+        else 
+        {
+          led_rgb_sign_of_life(0);
+        }
     }
     else // 2 flashs rapide de 2Hz
     {
-        if((cpt_250ms & 1)&&(cpt_250ms & 4)) led_sign_of_life(1); else led_sign_of_life(0);
+        if((cpt_250ms & 1)&&(cpt_250ms & 4)) 
+        {
+          led_rgb_sign_of_life(0xff0000);     // RED
+        }
+        else 
+        {
+          led_rgb_sign_of_life(0);
+        }
     }
     delay(0);
 
     // 5. LECTURE DU COURANT
-    an = analogRead(A0);
+    #if ANALOG_SENSOR != 0
+      an = analogRead(ANALOG_SENSOR);
+    #endif
+
     #if USB_MODE == 1
     #if DBG_1S == 1
         if(is_1s) { Serial.print("can="); Serial.println(an); }
