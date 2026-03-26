@@ -1,0 +1,4972 @@
+<!DOCTYPE HTML>
+<!--<html>-->
+<!--ffffcc, #7E9BD3  #ccffcc-->
+<html style="background-color:#000000">
+  <head>
+    <style>
+      body {
+        margin: 0px;
+        padding: 0px;
+        touch-action: manipulation;
+      }
+    </style>
+  </head>
+  <body>
+
+    <!-- <center><canvas id="myCanvas" width="400" height="800"></canvas></center>-->
+    <canvas id="myCanvas" width="1600" height="800"></canvas>
+    <!--<canvas id="myCanvas2" width="400" height="800"></canvas>-->
+
+    <script>
+
+var version = "20211204a";
+
+/*
+HISTORY
+    HISTORY
+    - 2020 dec 04: Ulysse : utilisation d'une image par defaut a la place des images introuvables
+    - 2020 dec 04: Ulysse : suppression des try catch pour fonctionner sur d'anciennes tablettes
+    - 2021 mai 11: Ulysse : correction bug jauge de courant
+    - 2020 nov 25: Ulysse : ajout de la selection des locos en par images
+    - 2020 nov 20: Ulysse : ajout des images des locos en fonction de l'adresse
+    - 2020 nov 20: Ulysse : ajout de la jauge de courant
+    - 2020 nov 17: Ulysse : mise en ligne
+    - 2020 nov 14: Ulysse : accelerometre fonctionne même en dehors de l'ecran des locos
+    - 2020 nov 13: John   : ajout des souris doubles, triples, quadruples
+    - 2020 nov 13: John   : ajout de l'UM
+    - 2020 sep 17: Ulysse : ajout de la rotation manuelle
+    - 2020 avr 27: Ulysse : ajout du recorder/player (encore experimental)
+    - 2020 avr 26: Ulysse : ajout de l'editeur de TCO
+    - 2020 avr 24: Ulysse : ajout d'une 2eme souris
+    - 2020 avr 23: Ulysse : merge TCO et souris dans le meme fichier d17.html
+    - 2020 avr 20: Ulysse : ajout de l'ecran d'accueil avec connection ws
+    - 2020 mar 23: Ulysse : creation du TCO tco1.html
+    - 2020 mar 20: Ulysse : mise en ligne souris1.html
+    - 2020 mar 10: Ulysse : connection de la souris avec D17
+    - 2020 jan 20: Ulysse : ajout et test des ws
+    - 2020 jan 10: Ulysse : creation, dessin de la souris simple
+
+TODO:
+
+++
+- mettre en haut a gauche de tous les ecrans un racourcit souris/tco/menu
+- mieux centrer
+- voir recadrage dynamique avec le timer
+- cleaner le code et l'archi
+- sauver image accueil
+
+++ souris
+- mieux adapter a la taille d('un ecran (4/3, 16/9 ?)
+- mieux centrer les souris multiples
+- rajouter les images des locos
+- ajouter le freinage, s'amuser, LR conduite realiste
+- souris avec ecran de vitesse
+- souris avec cabine
+- images pour selectionner les locos
+- activation d'une souris
+- sauver adr, um ...
+
+++ tco
+- essayer disque (D,VL,A)
+- ecrans de debug
+- ameliorer l'edition de tco (barre d'outil et sauvegarde)
+
+++ script
+- faire page script (pour lancer et suivre)
+- reflechir script plus puissant
+- voir edit dans le script
+- stockage dans le local du navigateur ?
+- stockage dans le SPIFFS ?
+- rajouter les messages echanges avec la centrale
+- transformer un enregistrement en trace
+
+++ avance
+- suivit des trains ?
+
+BUGS:
+- aucun
+
+CONFIGURATIONS testées:
+- Windows PC (chrome, firefox): ok
+- Windows PC (IE, Edge): ok, sauf mousemove ou touchmove ne marche pas
+- Linux PC (firefox): ok
+- Linux RaspberryPI: ok
+- Android vielle tablette (chrome2105): ok
+- Android smartphone recent (chrome, firefox):ok (sur mes appareils, acc etait seulement supporté ici)
+- Apple (MAC, iPhone, iPad): ok
+
+
+NOTES:
+- l'activation des websockets est une requetes HTTP, ce n'est pas immediat,
+  une fois le handshake HTTP fait, la communication par websocket est rapide et legere.
+- limitation a 5 websockets (chargement de page, marche quand meme)
+  les souris TCP marchent quand meme en //
+- js is mono threded so no race between timer & click
+- Pour que puisse fonctionner sur des vielles tablettes ex chrome 2015:
+   - pas de surcharge de parametres dans les fcts
+   - ancienne declaration des class (avec function a la place de class)
+- Articles pour l'accelerometre
+    https://developer.mozilla.org/fr/docs/Web/Guide/DOM/Events/Touch_events
+    https://sensor-js.xyz/demo.html
+    https://wprock.fr/blog/javascript-boites-dialogue-alert-confirm-prompt/
+
+*/
+
+
+
+
+
+
+//========================================
+// Partie "CONFIGURATION"
+//========================================
+
+var connect_at_start = 1; // essaye de se connecter aux websockets au lancement (sinon il faut le faire manuellement)
+
+var aff_line_ext = 0;  // 0 par defaut, 1 pour ajouter un carré au bout de chaque ligne
+var aff_cmd = 0;       // 0 par defaut, 1 pour afficher un rectangle autor de chaque commande
+
+var acc_min = 5;  // angle en degré sous lequel la vitesse est à 0%
+var acc_max = 30; // angle en degré correspondant à la vitesse 100%
+var acc_au = 50;  // angle au dessus duquel l'arrêt d'urgence est déclenché (si 0, ne declenche jamais l'au)
+
+// quelques couleurs
+var color_fond = '#ccffcc'; // vert pale   souris: '#5A9BD3'; et '#7E9BD3';
+var color_fond2 = '#ffffcc'; // saumon    souris: '#5A9BD3'; et '#7E9BD3';
+
+var color_grille = '#ffffff';
+var color_sel_off = "#cc8888"; color_sel_on = "#ff0020"; color_sel_border = "#ffffff";
+var color_red_off    = "#cc8888"
+var color_red_on     = "#ff0020"
+var color_orange_off = "#cccc99"
+var color_orange_on  = "#ff8000"
+var color_green_off  = "#88aa88"
+var color_green_on   = "#00ff00"
+var color_white_off  = "#888888"
+var color_white_on   = "#ffffff"
+var color_yellow_off = "#cccc99"
+var color_yellow_on  = "#ffff00"
+var color_blue_off   = "#8888aa" //"#8888cc"
+var color_blue_on    = "#0080FF" //"#0000ff"
+
+
+
+
+//========================================
+// Partie "VARIABLES GLOBALES"
+//========================================
+
+var canvas = document.getElementById('myCanvas');
+var context = canvas.getContext('2d');
+var ecran = "TCO";
+var case_nx = 30;
+var case_ny = 15;
+var case_dx = 50;
+var case_dy = 50;
+var user_dx = 0;
+var user_dy = 0;
+var zoom = 0;
+var grotate = 0;
+var au = 1;
+var mode_ana = 0;
+var mode_dcc = 0;
+var tco = -1;
+var tco_btn = 1; // tco selectionné (au depart et actuel) (pour y sauter directement a partir du menu ou de la souris
+var tco_mem = 0;
+
+
+
+
+
+
+//========================================
+// Partie "TCO"
+//========================================
+
+var ray_sel   = 13;
+var ray_bp    = 13;
+
+/*
+var canvas2 = document.getElementById('myCanvas2');
+var context2 = canvas.getContext('2d');
+
+function ctx2()
+{
+    var dx = window.innerWidth;    //UU: cree bien le canvas, mais ne dssine pas dedans ...
+    var dy = window.innerHeight/2;
+    canvas2.width = dx;
+    canvas2.height= dy;
+
+    context2.fillStyle = "#ff0000";
+    context2.strokeStyle = "#00FF00"; //col_bord;
+    context2.rect(0, 0, 100, 100); //!!! x,y,dx,dy
+    context2.fill();     // col_fond;
+    context2.stroke();     // col_bord
+}
+*/
+
+function scale(nx, ny)
+{
+    case_nx=nx; case_ny=ny;
+    user_dx = case_nx*case_dx;
+    user_dy = case_ny*case_dy;
+
+    //alert('w=' + window.innerWidth + ' h=' + window.innerHeight);
+    //canvas.width = window.innerWidth;
+    //canvas.height= windows.innerHeight;
+
+    if(grotate==0)
+    {
+        var zx = window.innerWidth / user_dx;
+        var zy = window.innerHeight / user_dy;
+        zoom = zx;
+        if(zy < zx) zoom=zy;
+        canvas.width = user_dx * zoom;
+        canvas.height = user_dy * zoom;
+        context.scale(zoom, zoom);    //TODO: le dimentionnement ne marche pas sur FF et sur la tablette Arnova
+        context.textAlign = "center"; // end,right | start,left
+    }
+
+    if(grotate)
+    {
+        var zx = window.innerHeight / user_dx;
+        var zy = window.innerWidth / user_dy;
+        zoom = zx;
+        if(zy < zx) zoom=zy;
+        canvas.width = user_dy * zoom;
+        canvas.height = user_dx * zoom;
+        context.scale(zoom, zoom);    //TODO: le dimentionnement ne marche pas sur FF et sur la tablette Arnova
+        context.textAlign = "center"; // end,right | start,left
+        context.translate(user_dy,0); context.rotate(1.57);
+    }
+
+    //ctx2(); //UU test
+}
+
+//  fonctions pour dessiner (plus facilement)
+
+function gline(x1,y1,x2,y2) { context.beginPath(); context.moveTo(x1, y1); context.lineTo(x2, y2); context.stroke(); context.fill(); }
+function gpoly(x1,y1,x2,y2,x3,y3,x4,y4) { context.beginPath(); context.moveTo(x1, y1); context.lineTo(x2, y2); context.lineTo(x3, y3); context.lineTo(x4, y4); context.closePath(); }
+function grect(x1,y1,x2,y2) { context.beginPath(); context.moveTo(x1, y1); context.lineTo(x2, y1); context.lineTo(x2, y2); context.lineTo(x1, y2); context.closePath(); }
+function goval(x1,y1,x2,y2) { context.beginPath(); var xc = (x1+x2)/2; var yc = (y1+y2)/2; var l = (x2-x1)/2; var h = (y2-y1)/2; context.ellipse(xc, yc, l, h, 0, 0, 2 * Math.PI);   /*context.drawEllipse(x1, y1, x2-x1, y2-y1);*/ }
+function goval2(x1,y1,x2,y2,a1,a2) { context.beginPath(); var xc = (x1+x2)/2; var yc = (y1+y2)/2; var l = (x2-x1)/2; var h = (y2-y1)/2; context.ellipse(xc, yc, l, h, 0, a1, a2); }
+function govalc(xc,yc,l,h,a1,a2) { context.beginPath(); context.ellipse(xc, yc, l, h, 0, a1, a2); }
+function grond(xc,yc,r) { context.beginPath(); context.ellipse(xc, yc, r, r, 0, 0, 360); }
+function grond2(xc,yc,rx,ry) { context.beginPath(); context.ellipse(xc, yc, rx, ry, 0, 0, 360); }
+
+/* usage:
+    context.fillStyle = "#CCCCCC";
+    context.strokeStyle = "#004400";
+    grect(x-l/2,y,x+l/2,y-h); context.fill(); context.stroke();
+    gline(x,y,x,y-h);
+//var zoom = 0.5;
+//var zoom = 1
+//context.scale(zoom, zoom);
+//flip context horizontally
+//context.scale(-1, 1);
+//context.lineWidth = 7;
+//context.strokeStyle = 'black';
+//context.stroke();
+//context.font = '40pt Calibri';
+//context.fillStyle = 'blue';
+//context.fillText('PST-WEB (Charging ...)', 150, 100);
+//alert('PST web');
+//context.textAlign = "center"; // end,right | start,left
+*/
+
+//function draw_rect(cell_x, cell_y, dx, dy, col, col_bord, txt="", col_txt='black')
+function draw_rect(cell_x, cell_y, dx, dy, col, col_bord, txt, col_txt)
+{
+    if(arguments.length<8) col_txt='black';
+    if(arguments.length<7) txt="";
+
+    dx=dx/2; dy=dy/2;
+
+    if(col!="")
+    {
+        var xc = case_dx*(cell_x+0.5);
+        var yc = case_dy*(cell_y+0.5);
+        var dxx=dx*case_dx;
+        var dyy=dy*case_dy;
+        context.fillStyle = col; grect(xc-dxx,yc-dyy,xc+dxx,yc+dyy);  context.fill();
+    }
+    if(col_bord!="")
+    {
+        draw_line(cell_x-dx, cell_y-dy, cell_x+dx, cell_y-dy, col_bord, 1);
+        draw_line(cell_x-dx, cell_y+dy, cell_x+dx, cell_y+dy, col_bord, 1);
+        draw_line(cell_x-dx, cell_y-dy, cell_x-dx, cell_y+dy, col_bord, 1);
+        draw_line(cell_x+dx, cell_y-dy, cell_x+dx, cell_y+dy, col_bord, 1);
+    }
+    if(txt!="") draw_text(cell_x, cell_y, txt, col_txt);
+}
+
+//function draw_sel(cell_x, cell_y, col, col_bord, vertical, col_fond=color_fond)
+function draw_sel(cell_x, cell_y, col, col_bord, vertical, col_fond)
+{
+    if(arguments.length<6) col_fond=color_fond;
+
+    var xc = case_dx*(cell_x+0.5);
+    var yc = case_dy*(cell_y+0.5);
+    context.fillStyle = col_fond; grect(xc-ray_sel-3,yc-ray_sel-3,xc+ray_sel+3,yc+ray_sel+3); context.fill();
+    context.fillStyle = col; context.strokeStyle = col_bord;
+    grond(xc, yc, ray_sel); context.fill(); context.stroke();
+    if(vertical==0) grect(xc-ray_sel-2,yc-2,xc+ray_sel+2,yc+2); else grect(xc-2,yc-ray_sel-2,xc+2,yc+ray_sel+2);
+    context.fill(); context.stroke();
+}
+
+//function draw_btn(cell_x, cell_y, c, txt, ct, cborder='black')
+function draw_btn(cell_x, cell_y, c, txt, ct, cborder)
+{
+    if(arguments.length<6) cborder='black';
+
+    var xc = case_dx*(cell_x+0.5);
+    var yc = case_dy*(cell_y+0.5);
+    var dx = ray_bp; var dy=ray_bp;
+    context.fillStyle = c; context.strokeStyle = cborder;
+    grect(xc-dx,yc-dy,xc+dx,yc+dy); context.fill(); context.stroke();
+    draw_text(cell_x, cell_y, txt, ct);
+}
+
+//function draw_voy(cell_x, cell_y, type, dx, dy, col, col_border="#000000" ,txt="", ct="#000000")
+function draw_voy(cell_x, cell_y, type, dx, dy, col, col_border ,txt, ct)
+{
+    if(arguments.length<7) col_border="#000000";
+    if(arguments.length<8) txt="";
+    if(arguments.length<9) ct="#000000";
+
+    var xc = case_dx*(cell_x+0.5);
+    var yc = case_dy*(cell_y+0.5);
+    dx = case_dx*dx/2;
+    dy = case_dy*dy/2;
+    context.fillStyle = col; context.strokeStyle = col_border;
+    if(type=="r") grect(xc-dx,yc-dy,xc+dx,yc+dy);
+    if(type=="o") grond2(xc,yc,dx, dy);
+    context.fill(); context.stroke();
+    if(txt!="") { draw_text(cell_x, cell_y + 0.25, txt, ct); }
+}
+
+//function draw_line(cell_x1, cell_y1, cell_x2, cell_y2, col="black", size=1)
+function draw_line(cell_x1, cell_y1, cell_x2, cell_y2, col, size)
+{
+    if(arguments.length<5) col="black";
+    if(arguments.length<6) size=1;
+
+    var xc1 = case_dx*(cell_x1+0.5);
+    var yc1 = case_dy*(cell_y1+0.5);
+    var xc2 = case_dx*(cell_x2+0.5);
+    var yc2 = case_dy*(cell_y2+0.5);
+
+    if(size!=1) context.lineWidth = size;
+    context.strokeStyle = col; context.fillStyle = col; gline(xc1, yc1, xc2, yc2);
+    if(size!=1) context.lineWidth = 1;
+}
+
+//function draw_text(cell_x, cell_y, txt, ct="#000000")
+function draw_text(cell_x, cell_y, txt, ct)
+{
+    if(arguments.length<4) ct="#000000";
+
+    var xc = case_dx*(cell_x+0.5);
+    var yc = case_dy*(cell_y+0.5);
+    //context.font = '' + parseInt(case_dy/4) + 'pt Courier';
+    //context.font = '' + parseInt(case_dy/4) + 'pt Calibri';
+    context.font = '' + parseInt(case_dy/5) + 'pt Times New Roman';
+    context.fillStyle = ct;
+    context.fillText(txt, xc, yc+ parseInt(case_dy/8));
+}
+
+// ------------------------------
+
+// nouvelle facon de declarer les class (mais cela ne marche pas sur les vieux navigateurs)
+/*
+class Cmd
+{
+    constructor(_x, _y, _cmd)
+    {
+        this.x = _x;
+        this.y = _y;
+        this.cmd = _cmd;
+    }
+}
+*/
+// on utilise alors l'ancienne facon de declarer les class
+function Cmd(_x, _y, _cmd)
+{
+        this.x = _x;
+        this.y = _y;
+        this.cmd = _cmd;
+}
+
+var acmd = [];
+
+// nouvelle facon des parametres par defaut (mais cela ne marche pas sur les vieux navigateurs)
+//function draw_rect_vide(x, y, dx, dy, col='black')
+// on utilise alors l'ancienne facon pour avoir des parametres par defaut
+function draw_rect_vide(x, y, dx, dy, col)
+{
+    if(arguments.length<4) col='black';
+
+    dx=dx/2;
+    dy=dy/2;
+
+    draw_line(x-dx, y-dy, x+dx, y-dy, col, 1);
+    draw_line(x+dx, y-dy, x+dx, y+dy, col, 1);
+    draw_line(x+dx, y+dy, x-dx, y+dy, col, 1);
+    draw_line(x-dx, y+dy, x-dx, y-dy, col, 1);
+}
+
+function add_cmd(x, y, cmd)
+{
+    if(aff_cmd)
+    {
+        draw_rect_vide(x, y, 0.90, 0.90, "#0000ff");  //extremities for debug
+    }
+
+    acmd.push(new Cmd(x, y, cmd));
+}
+
+function rm_cmd()
+{
+    while(acmd.length) acmd.pop();
+}
+
+function cmd_click(x, y)
+{
+    for(var i = 0; i < acmd.length; i++) if(acmd[i].x == x) if(acmd[i].y == y)
+    {
+        var cmd = acmd[i].cmd;
+        if(cmd.substring(0,4)=="Menu")
+        {
+            change_tco(-1);
+            return;
+        }
+        if((cmd.length >= 4) && (cmd.substring(0,3)=="tco"))
+        {
+            var t = parseInt(cmd.substring(3),10);
+            if(!isNaN(t)) change_tco(t);
+            return;
+        }
+        if((cmd.length >= 3) && (cmd.substring(0,3)=="loc"))
+        {
+            start_souris();
+            return;
+        }
+
+        if((cmd.length >= 3) && (cmd.substring(0,1)=="g"))
+        {
+            var t = parseInt(cmd.substring(1),10);
+            if(!isNaN(t)) change_geo(t);
+            return;
+        }
+
+        if((cmd.length >= 3) && (cmd.substring(0,3)=="au^"))  // au^ n'existe pas sur D17, on remplace par au0 et au1
+        {
+            //if(au) cmd[2]='0'; else cmd[2]='1';  //<< marche pas
+            if(au) cmd='au0'; else cmd='au1';
+        }
+
+        cmd_tx += cmd;
+        console.log("cmd_tx="+cmd_tx);
+        //log_and_alert("cmd_tx="+cmd_tx);
+    }
+}
+
+// ------------------------------
+
+// pour plus de rapidite de traitement les variables i,u,d,e sont misent dans un seul tableau
+// cela evite de faire des tests pour voir si c'est i ou u ou d ou e en permanence
+
+const nbI=96;  const I = 0;       //entree
+const nbU=192; const U = I + nbI; //variable U
+const nbD=48;  const D = U + nbU; //aiguillage en direct
+const nbE=48;  const E = D + nbD; //aiguillage en evitement
+               const AU = E + nbE;
+const nbVar = AU + 1;
+function getVarNum(varStr)
+{
+    var offs = 0;
+    if(varStr.length==0) return -1;
+    if(varStr[0]=='i') offs = I;
+    else if(varStr[0]=='u') offs = U;
+    else if(varStr[0]=='d') offs = D;
+    else if(varStr[0]=='e') offs = E;
+    else if(varStr[0]=='a') return AU;
+    else return -1;
+
+    var num = parseInt(varStr.substring(1),10); //base 10 pour eviter que 0 devant un nombre parse en octale
+    if (isNaN(num)) return -1;
+    if(varStr[0]=='i') if(num>nbI) return -1;
+    if(varStr[0]=='u') if(num>nbU) return -1;
+    if(varStr[0]=='d') if(num>nbD) return -1;
+    if(varStr[0]=='e') if(num>nbE) return -1;
+
+    return offs+num;
+}
+
+var new_var = [];
+var old_var = [];
+for(var i=0; i<nbVar; i+=1) { new_var.push(0); old_var.push(-1); }
+if(conn_ok==0) for(var i=0; i<nbD; i+=1) new_var[D+i]=1;  //aiguillagres en position directe  //UU: voir si on garde ca
+
+function getVar(num)
+{
+    if(num==-1) { log_and_alert("getVar error"); return 0; }
+    return new_var[num];
+}
+
+function setVar(num, val)
+{
+    if(num==-1) { log_and_alert("setVar error"); return; }
+    if(val<0 || val>1) log_and_alert("setVar error, val="+val);
+    else new_var[num] = val;
+}
+
+function invVar(num)
+{
+    if(num==-1) { log_and_alert("invVar error"); return; }
+    new_var[num] ^= 1;
+}
+
+function getStrVar(varStr)
+{
+    return getVar(getVarNum(varStr));
+}
+
+function setStrVar(varStr, val)
+{
+    return setVar(getVarNum(varStr), val);
+}
+
+function invStrVar(varStr)
+{
+    var num = getVarNum(varStr);
+    if(num==-1) return;
+    new_var[num]^=1;
+}
+
+var forceUpdate = 0;
+function chgVar(num)
+{
+    if(num==-1) return 0;
+    if(forceUpdate) return 1;
+    if(old_var[num] != new_var[num]) return 1;
+    return 0;
+}
+
+// ------------------------------
+
+//class Sel
+function Sel(_x, _y, _var, _vertical_on, _col_off, _col_on, _col_border, _col_bg)
+{
+    this.x = _x;
+    this.y = _y;
+    this.nvar = _var;
+    this.vertical_on = _vertical_on;
+    this.col_off = _col_off;
+    this.col_on = _col_on;
+    this.col_border = _col_border;
+    this.col_bg = _col_bg;
+}
+var aSel = [];
+
+//function add_sel(x, y, txt, cmd, varStr, vert_on, col_off, col_on, col_border='black', col_bg=color_fond, col_txt)
+function add_sel(x, y, txt, cmd, varStr, vert_on, col_off, col_on, col_border, col_bg, col_txt)
+{
+    if(arguments.length<9) col_border='black';
+    if(arguments.length<10) col_bg=color_fond;
+    if(arguments.length<11) col_txt='black';
+
+    add_cmd(x, y, cmd);
+    num = getVarNum(varStr);
+    if(num == -1) log_and_alert("add_sel error: \""+varStr+"\" is not a variable");
+    aSel.push(new Sel(x, y, num, vert_on, col_off, col_on, col_border, col_bg));
+    draw_text(x, y+.4, txt, col_txt);
+}
+
+function rm_sel()
+{
+    while(aSel.length) aSel.pop();
+}
+
+function draw_aSel()
+{
+    for(var i=0; i<aSel.length; i+=1)
+    {
+        var numVar=aSel[i].nvar;
+        if(chgVar(numVar))
+        {
+            if(getVar(numVar)) draw_sel(aSel[i].x, aSel[i].y, aSel[i].col_on , aSel[i].col_border, aSel[i].vertical_on  , aSel[i].col_bg)
+            else               draw_sel(aSel[i].x, aSel[i].y, aSel[i].col_off, aSel[i].col_border, aSel[i].vertical_on^1, aSel[i].col_bg)
+        }
+    }
+}
+
+// ------------------------------
+
+//class Bp
+function Bp(_x, _y, _var, _col_off, _col_on, _col_border, _txt, _col_txt)
+    {
+        this.x = _x;
+        this.y = _y;
+        this.nvar = _var;
+        this.col_off = _col_off;
+        this.col_on = _col_on;
+        this.col_border = _col_border;
+        this.txt = _txt;
+        this.col_txt = _col_txt;
+    }
+var aBp = [];
+
+//function add_bp(x, y, txt, cmd, varStr, col_off, col_on, col_border='black', col_txt='black')
+function add_bp(x, y, txt, cmd, varStr, col_off, col_on, col_border, col_txt)
+{
+    if(arguments.length<8) col_border='black';
+    if(arguments.length<9) col_txt='black';
+
+    add_cmd(x, y, cmd);
+
+    var num = getVarNum(varStr);
+    if(num == -1) log_and_alert("add_bp error: \""+varStr+"\" is not a variable");
+    aBp.push(new Bp(x, y, num, col_off, col_on, col_border, txt, col_txt));
+}
+
+function rm_bp()
+{
+    while(aBp.length) aBp.pop();
+}
+
+function draw_aBp()
+{
+    for(var i=0; i<aBp.length; i+=1)
+    {
+        var num=aBp[i].nvar;
+        if(chgVar(num))
+        {
+            if(getVar(num)) draw_btn(aBp[i].x, aBp[i].y, aBp[i].col_on , aBp[i].txt, aBp[i].col_txt, aBp[i].col_border);
+            else            draw_btn(aBp[i].x, aBp[i].y, aBp[i].col_off, aBp[i].txt, aBp[i].col_txt, aBp[i].col_border);
+        }
+    }
+}
+
+// ------------------------------
+
+var geo_sel = -1;
+
+var aGeo = [];
+
+//function add_geo_bp(x, y, txt, num, col_off, col_on, col_border='black', col_txt='black')
+function add_geo_bp(x, y, txt, num, col_off, col_on, col_border, col_txt)
+{
+    if(arguments.length<7) col_border='black';
+    if(arguments.length<8) col_txt='black';
+
+    add_cmd(x, y, "g"+num+'+');
+
+    aGeo.push(new Bp(x, y, num, col_off, col_on, col_border, txt, col_txt));
+    draw_btn(x, y, col_off, txt, col_txt, col_border);
+}
+
+function rm_geo()
+{
+    while(aGeo.length) aGeo.pop();
+    geo_sel = -1;
+}
+
+function draw_aGeo() // redessine tout
+{
+    for(var i=0; i<aGeo.length; i+=1)
+    {
+        var geo=aGeo[i];
+        var num=geo.nvar;
+        //UU: pissibilite d'optimiser
+        if(num==geo_sel) draw_btn(geo.x, geo.y, geo.col_on , geo.txt, geo.col_txt, geo.col_border);
+        else             draw_btn(geo.x, geo.y, geo.col_off, geo.txt, geo.col_txt, geo.col_border);
+    }
+}
+
+//class GeoCmd
+function GeoCmd(_old, _new, _cmd)
+    {
+        this.old = _old;
+        this.new = _new;
+        this.cmd = _cmd;
+    }
+var ageocmd = [];
+
+function add_geo_cmd(geo1, geo2, cmd)
+{
+    ageocmd.push(new GeoCmd(geo1, geo2, cmd));
+}
+function add_geo_cmd2(geo1, geo2, cmd)
+{
+    add_geo_cmd(geo1, geo2, cmd);
+    add_geo_cmd(geo2, geo1, cmd);
+}
+
+function rm_geo_cmd()
+{
+    while(ageocmd.length) ageocmd.pop();
+}
+
+function change_geo(num)
+{
+    console.log("change_geo num="+num+" old="+geo_sel);
+    if(geo_sel == -1) { geo_sel=num; draw_aGeo(); return; } // appuie sur le premier bouton
+
+    //if(geo_sel == num) { geo_sel=-1; draw_aGeo(); return; } // appuie sur le meme bouton (normalement annulation, mais commente pour laisser libre de faire qc)
+
+    for(var i=0; i<ageocmd.length; i+=1)
+    {
+        var geo=ageocmd[i];
+        if(geo.old == geo_sel) if(geo.new == num)
+        {
+            cmd_tx+=geo.cmd;
+            //for(var j=0; j<geo.cmd.length; j++) if(geo.cmd[j]=='a') cmd_tx += 't'; else cmd_tx += geo.cmd[j];  //si on veut remplacer es a par des t
+        }
+    }
+    geo_sel=-1;
+    draw_aGeo();
+}
+
+// ------------------------------
+
+//class Voy
+function Voy(_x, _y, _dx, _dy, _t, _var, _col_off, _col_on, _col_border, _txt, _col_txt)
+    {
+        this.x = _x;
+        this.y = _y;
+        this.dx = _dx;
+        this.dy = _dy;
+        this.t = _t;
+        this.nvar = _var;
+        this.col_off = _col_off;
+        this.col_on = _col_on;
+        this.col_border = _col_border;
+        this.txt = _txt;
+        this.col_txt = _col_txt;
+    }
+var aVoy = [];
+
+//function add_voy(x, y, typeStr, dx, dy, varStr, col_off, col_on, col_border='black', txt="", col_txt='black')
+function add_voy(x, y, typeStr, dx, dy, varStr, col_off, col_on, col_border, txt, col_txt)
+{
+    if(arguments.length<9) col_border='black';
+    if(arguments.length<10) txt="";
+    if(arguments.length<11) col_txt='black';
+
+    var num = getVarNum(varStr);
+    if(num==-1) log_and_alert("add_voy error: \""+varStr+"\" is not a variable");
+    aVoy.push(new Voy(x, y, dx, dy, typeStr, num, col_off, col_on, col_border, txt, col_txt));
+}
+
+function rm_voy()
+{
+    while(aVoy.length) aVoy.pop();
+}
+
+function draw_aVoy()
+{
+    for(var i=0; i<aVoy.length; i+=1)
+    {
+        var numVar=aVoy[i].nvar;
+        console.log("voy nvar ="+numVar);
+        if(chgVar(numVar))
+        {
+            var col; if(getVar(numVar)) col = aVoy[i].col_on; else col = aVoy[i].col_off;
+            console.log("draw voy x="+aVoy[i].x+" y="+aVoy[i].y);
+            draw_voy(aVoy[i].x, aVoy[i].y, aVoy[i].t, aVoy[i].dx, aVoy[i].dy, col, aVoy[i].col_border, aVoy[i].txt, aVoy[i].col_txt);
+        }
+    }
+}
+
+// ------------------------------
+
+function add_feu(x, y, varStr, col_off, col_on, txt, col_txt, cible, col_cible)
+{
+    if(arguments.length<9) col_cible='black';
+    //add_feu(13,1,"u0","#888888","#ff0000","cv12","black",2,"black");
+    var dx=0.2;
+    var dy=0.2;
+    //  12
+    //  34
+    if(cible)
+    {
+        var xc=case_dx*(x+.5);
+        var yc=case_dy*(y+.5);
+        var h; var l;
+        if(cible==1 || cible==2) h=-9; else h=+9;
+        if(cible==1 || cible==3) l=-17; else l=+17;
+        var ycc=yc+h;
+        var xcc=xc+l;
+
+        context.fillStyle = col_cible; grect(xc-dx*case_dx,ycc-0.6*dy*case_dy,xc+dx*case_dx,ycc+0.6*dy*case_dy); context.fill();
+
+        context.strokeStyle = col_cible; context.fillstrokeStyle = col_cible; gline(xc,ycc,xcc,ycc); gline(xcc,ycc,xcc,yc);
+    }
+
+    add_voy(x, y+(h/50), 'o', dx, dy, varStr, col_off, col_on, 'black', "", 'black');
+
+    if(txt!="") { draw_text(x, y+(0.05*h), txt, col_txt); }
+}
+
+// ------------------------------
+
+//class Line
+function Line(_x1, _y1, _x2, _y2, _size, _col0, _nvars1, _col1, _nvars2, _col2, _nvars3, _col3, _isza)
+    {
+        this.x1 = _x1;
+        this.y1 = _y1;
+        this.x2 = _x2;
+        this.y2 = _y2;
+        this.size = _size;
+        this.col0 = _col0;
+        this.nvars1 = _nvars1;
+        this.col1 = _col1;
+        this.nvars2 = _nvars2;
+        this.col2 = _col2;
+        this.nvars3 = _nvars3;
+        this.col3 = _col3;
+        this.isza = _isza;
+
+        this.len1 = this.nvars1.length;
+        this.len2 = this.nvars2.length;
+        this.len3 = this.nvars3.length;
+
+        this.static = 0;
+        if((this.len1 + this.len2 + this.len3)==0) this.static = 1;
+
+        this.old_find = -1;
+    }
+var aLine = [];
+
+function log_and_alert(msg)
+{
+    console.log(msg);
+    alert(msg);
+}
+
+var line_old_x = 0;
+var line_old_y = 0
+//function add_line(x1, y1, x2, y2, size=1, col_off='black', list_svar1="", col1='black', list_svar2="", col2='black', list_svar3="", col3='black', isza=0)
+function add_line(x1, y1, x2, y2, size, col_off, list_svar1, col1, list_svar2, col2, list_svar3, col3, isza)
+{
+    if(arguments.length<5) size=1;
+    if(arguments.length<6) col_off='black';
+    if(arguments.length<7) list_svar1="";
+    if(arguments.length<8) col1='black';
+    if(arguments.length<9) list_svar2="";
+    if(arguments.length<10) col2='black';
+    if(arguments.length<11) list_svar3="";
+    if(arguments.length<12) col3='black';
+    if(arguments.length<13) isza=0;
+
+    if(x1==-1) x1 = line_old_x;
+    if(y1==-1) y1 = line_old_y;
+    line_old_x = x2;
+    line_old_y = y2;
+
+    if(aff_line_ext)
+    {
+        draw_rect(x1, y1, 6/case_dx, 6/case_dy, "#00ff00", "", "black");  //extremities for debug
+        draw_rect(x2, y2, 6/case_dx, 6/case_dy, "#00ff00", "", "black");
+    }
+
+    list_nvar1 = [];
+    if(list_svar1!="") //protection car split renvoie len=1 array[0]="" lorsqu'il n'arrive pas a spliter pas !!!
+    {
+        var svar1_split = list_svar1.split(",");
+        for(var i=0; i<svar1_split.length; i+=1) if(svar1_split[i]!="")
+        {
+            var num = getVarNum(svar1_split[i]);
+            //console.log(i+"-->\""+svar1_split[i]+"\"  num="+num);
+            if(num == -1) log_and_alert("add_line error: \""+svar1_split[i]+"\" is not a variable");
+            else list_nvar1.push(num);
+        }
+    }
+    list_nvar2 = [];
+    if(list_svar2!="")
+    {
+        var svar2_split = list_svar2.split(",");
+        for(var i=0; i<svar2_split.length; i+=1) if(svar2_split[i]!="")
+        {
+            var num = getVarNum(svar2_split[i]);
+            if(num == -1) log_and_alert("add_line error: \""+svar2_split[i]+"\" is not a variable");
+            else list_nvar2.push(num);
+        }
+    }
+    list_nvar3 = [];
+    if(list_svar3!="")
+    {
+        var svar3_split = list_svar3.split(",");
+        for(var i=0; i<svar3_split.length; i+=1) if(svar3_split[i]!="")
+        {
+            var num = getVarNum(svar3_split[i]);
+            if(num == -1) log_and_alert("add_line error: \""+svar3_split[i]+"\" is not a variable");
+            else list_nvar3.push(num);
+        }
+    }
+    aLine.push(new Line(x1, y1, x2, y2, size, col_off, list_nvar1, col1, list_nvar2, col2, list_nvar3, col3, isza));
+}
+
+function rm_line()
+{
+    while(aLine.length) aLine.pop(); // UU: remover les listes internes (normalement pas besoin, si plus de reference doit se faire tout seul)
+}
+
+function draw_aLine()
+{
+    for(var l=0; l<aLine.length; l+=1)
+    {
+        var line=aLine[l]; //reference
+
+        var col = line.col0;
+        var find=0;
+        if(line.static == 0) // optim
+        {
+            if(line.len1) for(var i=0; i<line.nvars1.length; i+=1) if(getVar(line.nvars1[i])) { find=1; break;}
+            if(line.len2) for(var i=0; i<line.nvars2.length; i+=1) if(getVar(line.nvars2[i])) { find=2; break;}
+            if(line.len3) if(line.isza==0 || find) for(var i=0; i<line.nvars3.length; i+=1) if(getVar(line.nvars3[i])) { find=3; break;}
+            if(find==1) col = line.col1;
+            if(find==2) col = line.col2;
+            if(find==3) col = line.col3;
+        }
+        if((find!=line.old_find) || forceUpdate) // optim
+        {
+            line.old_find = find;
+            draw_line(line.x1, line.y1, line.x2, line.y2, col, line.size);
+        }
+    }
+}
+
+// ------------------------------
+
+//function add_fond(x, y, nx, ny, col_fond, col_grille="", aff_nb=0)
+function add_fond(x, y, nx, ny, col_fond, col_grille, aff_nb)
+{
+    if(arguments.length<6) col_grille="";
+    if(arguments.length<7) aff_nb=0;
+
+    context.rect(x*case_dx, y*case_dy, nx*case_dx, ny*case_dy); //!!! x,y,dx,dy
+    //context.rect(x*case_dx, y*case_dy, (x+nx)*case_dx, (y+ny)*case_dy); //!!! x,y,dx,dy
+    context.fillStyle = col_fond; context.fill();
+
+    if(col_grille!="")
+    {
+        context.strokeStyle = col_grille;
+        for(var i=1;i<nx;i+=1) gline((x+i)*case_dx,y*case_dy,(x+i)*case_dx,(y+ny)*case_dy);
+        for(var i=1;i<ny;i+=1) gline(x*case_dx,(y+i)*case_dy,(x+nx)*case_dx,(y+i)*case_dy);
+
+        if(aff_nb)
+        {
+            for(var i=0; i<nx; i++) draw_text(x+i, y, ""+(x+i), "black");
+            for(var j=0; j<ny; j++) draw_text(x, y+j, ""+(y+j), "black");
+        }
+    }
+}
+
+// ------------------------------
+
+// Creation des TCOs
+
+// ajout de fonctions crees a partir des fonctions de base
+
+function add_bmvu(x, y, col_fond, txt1, txt2, col_txt, u)
+{
+    context.beginPath(); // sans cela fait des trucs bizare si pas la grille !
+    context.rect(case_dx*x, case_dy*y, 2*case_dx, 4*case_dy); context.fillStyle = col_fond; context.fill();
+
+    draw_text(x+0.5 ,y-.2, txt1, col_txt);
+    draw_text(x+0.5 ,y+.2, txt2, col_txt);
+    console.log("1="+  "u"+u+"^"  +"2="+ "u"+u);
+    add_sel(x  ,y+1,  "", "u"+u+"^", "u"+u  , 0, color_red_off   , color_red_on   , 'white'  , col_fond, 'black'); u+=1;
+    add_bp( x  ,y+2, "R", "u"+u+"^", "u"+u,    color_yellow_off, color_yellow_on, "white"  , 'black' ); u+=1;
+    add_bp( x  ,y+3, "S", "u"+u+"^", "u"+u,    color_white_off , color_white_on , "white"  , 'black' ); u+=1;
+    add_bp( x+1,y+1, "A", "u"+u+"^", "u"+u,    color_red_off   , color_red_on   , "white"  , 'black' ); u+=1;
+    add_bp( x+1,y+2, "T", "u"+u+"^", "u"+u,    color_green_off , color_green_on , "white"  , 'black' ); u+=1;
+    add_sel(x+1,y+3,  "", "u"+u+"^", "u"+u, 1, color_white_off , color_white_on , '#eeeeee', col_fond, 'black'); u+=1;
+    add_voy(x+1,y+1.4, 'o', .2, .2, "u"+u, "#444444", "#ffffff", 'black', "", 'black'); u+=1;
+    add_voy(x+1,y+2.6, 'o', .2, .2, "u"+u, "#444444", "#ff0000", 'black', "", 'black');
+}
+
+// fonctions utilisées par l'éditeur (en plus des fonctions de base)
+var aff_u = 1; var aff_i = 1; var aff_a = 1;
+function edit_add_aig(xc, yc, xd, yd, xe, ye, aig)
+{
+    add_line(xc, yc, xd, yd, 2, 'white', "d"+aig, 'blue');
+    add_line(xc, yc, xe, ye, 2, 'white', "e"+aig, 'blue');
+    add_cmd(xc, yc, "t"+aig+"^");
+    if(aff_a) draw_text(xc, yc+.2, "a"+aig);
+}
+function edit_add_sel( x, y, u) { var t = ""; if(aff_u) t+=u; add_sel(x, y, t, "u"+u+'^', "u"+u, 1, color_blue_off, color_blue_on, 'black', color_fond); }
+function edit_add_btn(x, y, txt, u)
+{
+    var cmd = "u"+u+"^";
+    var aff = "u"+u;
+    add_bp(x, y, txt, cmd, aff, color_yellow_off, color_yellow_on, 'black', 'black');
+    if(aff_u) draw_text(x, y+.35, u);
+}
+function edit_add_geo(x, y, txt, num) { add_geo_bp(x, y, txt, num, color_white_off, color_white_on, col_border='black', col_txt='black'); }
+function edit_add_occ(x,y,i) { var t = ""; if(aff_i) t='i'+i; add_voy(x, y, 'r', .4, .2, 'i'+i, "#cccccc", "#ff0000", 'black', t); add_cmd(x, y, 'i'+i+'^'); }  //UU pour dbg
+function edit_add_feu(x,y,txt,u,pos) { add_feu(x, y , "u"+u, "#888888", "#ff0000", txt, 'black', pos, "black"); add_cmd(x, y, 'u'+u+'^'); }
+
+//  TCO 0 (choix des TCOs)
+
+function tco0_init()
+{
+    scale(4,7);
+    add_fond(0, 0, 4, 7, '#5A9BD3', '', 0);
+
+    draw_text(1, 0, "Choix du TCO ?", 'black');
+    add_cmd(3,0,"Menu"); draw_text(3, 0, "Menu", 'black');
+
+    function add_tco(x, y, tco, descr)
+    {
+         draw_rect(x, y, .9, .9, "green", "black", "TCO "+tco , "white"); draw_text(x+1, y, descr , 'black'); add_cmd(x,y,"tco"+tco); add_cmd(x+1,y,"tco"+tco);
+    }
+
+    add_tco(0, 2, 1, "LU");
+    add_tco(0, 3, 2, "LULU");
+    add_tco(0, 4, 3, "GARE");
+    add_tco(0, 5, 4, "");
+    add_tco(0, 6, 5, "EDIT");
+    add_tco(2, 2, 6, "ESS");
+    add_tco(2, 3, 7, "BMVU");
+    add_tco(2, 4, 8, "64IN");
+    add_tco(2, 5, 9, "48AIG");
+    add_tco(2, 6,10, "64U");
+}
+
+//  TCO 1
+
+function tco1_init()
+{
+    var aff_u = 1; var aff_i = 1; var aff_a = 1;
+
+    function add_cr( x, y, u) { var t = ""; if(aff_u) t+=u; add_sel(x, y, t, u+'^', u, 1, color_blue_off, color_blue_on, 'black', color_fond); }
+    function add_cri(x, y, u) { var t = ""; if(aff_u) t+=u; add_sel(x, y, t, u+'^', u, 0, color_blue_off, color_blue_on, 'black', color_fond); }
+    function add_cf(x, y, u) {  var t = ""; if(aff_u) t+=u; add_sel(x, y, t, u+'^', u, 0, color_red_off, color_red_on, 'black', color_fond); }
+    function add_cfinv(x, y, u) { add_sel(x, y, "inv", u+'^', u, 1, color_yellow_off, color_yellow_on, 'black', color_fond); }
+    function add_bled(x, y, txt, u)
+    {
+        add_bp(x, y, txt, u+"^", u, color_yellow_off, color_yellow_on, 'black', 'black');
+        if(aff_u) draw_text(x, y+.35, u);
+    }
+    function add_geo(x, y, txt, num) { add_geo_bp(x, y, txt, num, color_white_off, color_white_on, col_border='black', col_txt='black'); }
+    function add_occ(x,y,i) { var t = ""; if(aff_i) t='i'+i; add_voy(x, y, 'r', .4, .2, 'i'+i, "#cccccc", "#ff0000", 'black', t); add_cmd(x, y, 'i'+i+'^'); }  //UU pour dbg
+    function add_line_dir(x1, y1, x2, y2, aig) { add_line(x1, y1, x2, y2, 2, 'white', "d"+aig, 'blue'); }
+    function add_line_dev(x1, y1, x2, y2, aig) { add_line(x1, y1, x2, y2, 2, 'white', "e"+aig, 'blue'); }
+    function add_aig(xc, yc, xd, yd, xe, ye, aig)
+    {
+        add_line_dir(xc, yc, xd, yd, aig);
+        add_line_dev(xc, yc, xe, ye, aig);
+        add_cmd(xc, yc, "t"+aig+"^");
+        if(aff_a) draw_text(xc, yc+.2, "a"+aig);
+    }
+    function add_eclise(x,y) { draw_rect(x, y, 0.1, 0.1, "#0000ff"); }
+
+    scale(18,9); add_fond(0, 0, 18, 9, color_fond, color_grille, 0);
+    add_cmd(0,0,"tco0"); draw_text(0,0,"tco0");
+    add_cmd(1,0,"loc");  draw_text(1,0,"loc");
+    add_cmd(2,0,"Menu"); draw_text(2,0,"Menu");
+    var X=-1;
+
+    //draw_img_in_cell(img1, 6, 3, 4, 1);  draw_img_in_cell(img2, 10, 3, 4, 1);
+    //draw_img_in_cell(img3, 8.5, 4, 18, 9);
+    //draw_img_in_cell(img2, 0, 0, 18, 9, 0, 0);
+
+    // partie visible nord
+    var xg=6; var yg=1;
+    add_aig(xg, yg, xg+1, yg, xg+1, yg-1, 8); add_line(X, X, xg+5, yg-1); add_line(X, X, xg+5+4, yg-1); add_aig(xg+10, yg, xg+9, yg, xg+9, yg-1, 9);
+    add_line(xg+1,yg,xg+8,yg); add_aig(xg+9, yg, xg+8, yg,xg+8.5, yg+0.5, 10);
+    add_line(xg+5, yg+1, xg+8, yg+1); add_aig(xg+8, yg+1, xg+9, yg+1, xg+8.5, yg+0.5, 10); add_line(xg+9, yg+1, xg+10, yg+1);
+
+    // partie visible est
+    add_line(16, 1, 16.5, 1); add_line(X, X, 17, 1.5); add_line(X, X, 17, 4.5); add_line(X, X, 16.5, 5);
+
+    // partie visible sud
+    add_line(6, 5, 8, 5); // passerelle
+    add_line(X, X, 9, 5); // tunnel
+    add_line(X, X, 11, 5); // viaduc rouzet
+    add_line(X, X, 16.5, 5); // la halte
+
+    // partie technique
+    add_line(0, 3, 0, 1.5); add_line(X, X, 0.5, 1); add_line(X, X, 2.5, 1); add_line(X, X, 6, 1);
+    add_aig(0, 4, 0, 3, 1, 3, 1); add_line(1, 3, 2, 3); add_line(X, X, 3, 4);
+    add_line(0, 4, 0, 4.5); add_line(X, X, 0.5, 5); add_line(X, X, 3, 5); add_aig(4, 5, 3, 4, 3, 5, 0); add_line(4, 5, 5, 5); add_aig(5, 5, 6, 5, 6, 6, 2);
+
+    // coulisse
+    add_aig( 6, 6,  7, 7,  7, 6, 3); add_line( 7, 7,  7, 8.5);  //VA
+    add_aig( 7, 6,  8, 6,  8, 7, 4); add_line( 8, 7,  8, 8.5);  //VB
+    add_aig( 8, 6,  9, 6,  9, 7, 5); add_line( 9, 7,  9, 8.5);  //VC
+    add_aig( 9, 6, 10, 6, 10, 7, 6); add_line(10, 7, 10, 8.5);  //VD
+    add_aig(10, 6, 11, 6, 11, 7, 7); add_line(11, 7, 11, 8.5);  //VE
+    add_line(11,6, 12, 7);           add_line(12, 7, 12, 8.5);  //VF
+
+    // eclises
+    add_eclise(0,3); add_eclise(2.5,1); add_eclise(7,1); add_eclise(7,0); add_eclise(11,0); add_eclise(11,1); add_eclise(15,0); add_eclise(14,1); add_eclise(14.5,1.5); add_eclise(14.5,2);
+    add_eclise(3,4); add_eclise(3,5); add_eclise(7.5,5); add_eclise(10.5,5); add_eclise(16,5);
+    add_eclise(6.5,6.5); add_eclise(7.5,6.5); add_eclise(8.5,6.5); add_eclise(9.5,6.5); add_eclise(10.5,6.5); add_eclise(11.5,6.5);
+
+    // boutons/feux/voyants
+    add_geo(7,7,'A',5); add_geo(8,7,'B',6); add_geo(9,7,'C',7); add_geo(10,7,'D',8); add_geo(11,7,'E',9); add_geo(12,7,'F',10);
+    add_cr(7, 8, "u1"); add_cr(8, 8, "u2"); add_cr(9, 8, "u3"); add_cr(10, 8, "u4"); add_cr(11, 8, "u5"); add_cr(12, 8, "u5");  //u6 normalement, u5 pour l'instant
+
+    add_cri(9,  0, "u10"); add_cri(13, 0, "u11"); add_cri(9, 1, "u8"); add_cri(13, 1, "u9"); add_cr(0, 2, "u0");
+    add_cfinv(2, 4, "u27");
+
+    add_geo( 2,1,'Ex1',1); add_geo(2,3,'Bcl',2); add_geo(2,5,'T',3); add_geo(7,5,'Ex2',4);
+    add_geo(10,1,'V1',11); add_geo(10,0,'V2',12);
+
+    add_geo_cmd2(1, 11, "t8-"); add_geo_cmd2(1, 12, "t8/"); add_geo_cmd2(4, 11, "t10-t9-"); add_geo_cmd2(4, 12, "t9/"); // V1&2
+    add_geo_cmd2(3, 1, "t1-");  //T-EXT1
+    add_geo_cmd2(3, 4, "t0/t2-");  //T-EXT2
+    add_geo_cmd2(3, 2, "t1/");  //T-BCL
+    add_geo_cmd2(4, 2, "t0-t2-");  //EXT2-BCL
+    add_geo_cmd2(3, 5, "t0/t2/t3-"); add_geo_cmd2(3, 6, "t0/t2/t3/t4/"); add_geo_cmd2(3, 7, "t0/t2/t3/t4-t5/"); //T-A..F
+    add_geo_cmd2(3, 8, "t0/t2/t3/t4-t5-t6/"); add_geo_cmd2(3, 9, "t0/t2/t3/t4-t5-t6-t7/"); add_geo_cmd2(3, 10, "t0/t2/t3/t4-t5-t6-t7-"); //T-A..F
+    add_geo_cmd2(2, 5, "t0-t2/t3-"); add_geo_cmd2(2, 6, "t0-t2/t3/t4/"); add_geo_cmd2(2, 7, "t0-t2/t3/t4-t5/"); //BCL-A..F
+    add_geo_cmd2(2, 8, "t0-t2/t3/t4-t5-t6/"); add_geo_cmd2(2, 9, "t0-t2/t3/t4-t5-t6-t7/"); add_geo_cmd2(2, 10, "t0-t2/t3/t4-t5-t6-t7-"); //BCL-A..F
+
+    add_occ(4,1,3);
+    add_occ(8,0,7); add_occ(12,0,8); add_occ(8,1,5); add_occ(12,1,6);    add_occ(12,2,9); add_occ(16,2,10);
+    add_occ(17,2,4);
+    add_occ(12,5,11); add_occ(9,5,12);
+    add_occ(4.5,5,0); add_occ(1,5,1); add_occ(6,7,0); add_occ(1, 1,2);
+
+    add_feu(16, 0.5 , "u20", "#888888", "#ff0000", "S1", 'black', 1, "black"); add_cf(17, 0, "u20");
+    add_feu( 6, 1.05, "u21", "#888888", "#ff0000", "S2", 'black', 4, "black"); add_cf( 6, 2, "u21");
+    add_feu(16, 4.95, "u22", "#888888", "#ff0000", "D3", 'black', 1, "black"); add_cf(16, 4, "u22");
+    add_feu(3 , 0.95, "u23", "#888888", "#ff0000", "D4", 'black', 1, "black"); add_cf( 3, 0, "u23");
+    //add_bmvu(20, 9, 'black', "BLOCK cote", "EX-B"   , 'white', 80);
+    //add_bmvu(24, 9, 'black', "BLOCK coté", "GARE G1", 'white', 88);
+    //add_bmvu(17, 9, 'black', "BLOCK cote", "EX-A"   , 'white', 64);
+    //add_bmvu( 1, 9, 'black', "BLOCK coté", "GARE G1", 'white', 72);
+
+
+    /* cmd u pour les leds
+    if(num==30) // vert est
+    if(num==31) // rouge est
+    if(num==32) // vert ouest
+    if(num==33) // rouge ouest
+    if(num==34) // BV bas
+    if(num==35) // BV haut
+    if(num==36) // lampadaire Q est
+    if(num==37) // lampadaire Q centre
+    if(num==38) // lampadaire Q ouest
+    if(num==39) // lampadaire Q evt est
+    if(num==40) // lampadaire Q evt centre
+    if(num==41) // lampadaire Q evt ouest
+
+    if(num==50) // BV bas
+    if(num==51) // BV haut
+
+    if(num==52) // PN
+    if(num==53) // lampadaire Q est
+    if(num==54) // lampadaire Q centre
+    if(num==55) // lampadaire Q ouest
+
+    if(num==60) // disque V
+    if(num==61) // disque R
+    if(num==62) // disque J
+    if(num==63) // disque J (avertissement)
+    */
+
+    add_cf(16,3,"u24"); draw_text(16.7,3.4,"PN1");
+    add_cf(13,4,"u25"); draw_text(13,5.6,"PN2");
+
+    add_bled(0, 7, "V"   , "u30");
+    add_bled(1, 7, "BVh" , "u35");
+    add_bled(2, 7, "L"   , "u39");
+    add_bled(3, 7, "L"   , "u40");
+    add_bled(4, 7, "L"   , "u41");
+    add_bled(5, 7, "V"   , "u30");
+    add_bled(0, 8, "R"   , "u32");
+    add_bled(1, 8, "BVb" , "u34");
+    add_bled(2, 8, "L"   , "u36");
+    add_bled(3, 8, "L"   , "u37");
+    add_bled(4, 8, "L"   , "u38");
+    add_bled(5, 8, "R"   , "u33");
+
+    add_bled(13, 7, "DR"  , "u61");
+    add_bled(14, 7, "DJ"  , "u62");
+    add_bled(15, 7, "BVh" , "u51");
+    add_bled(16, 7, "Bvl" , "u50");
+    add_bled(17, 7, "PN"  , "u52");
+    add_bled(13, 8, "VL"  , "u60");
+    add_bled(14, 8, "A"   , "u63");
+    add_bled(15, 8, "L"   , "u55");
+    add_bled(16, 8, "L"   , "u54");
+    add_bled(17, 8, "L"   , "u53");
+
+    add_bp(6, 8, "AU", 'au^', 'au', color_red_off, color_red_on, 'black', 'black');
+
+    // un peu de serigraphie
+    draw_rect(10,-0.5, 6, .4, "", "#808080", "quai2" , "#808080");
+    draw_rect(10, 1.5, 6, .4, "", "#808080", "quai1" , "#808080");
+    draw_rect(10,   2, 1, .6, "", "#808080", "BV"    , "#808080");
+
+    draw_rect(14.5, 5.3, 2, .4, "", "#808080", "quaiH" , "#808080");
+
+    draw_rect(13, 5, .2, 1, "", "#808080", "" , "#808080");
+    draw_rect(17, 3, 1, .2, "", "#808080", "" , "#808080");
+}
+
+//  TCO 2
+
+function tco2_init()
+{
+    function add_cr( x, y, u) { add_sel(x, y, ""+u, u+'^', u, 1, color_blue_off, color_blue_on, 'black', color_fond); }
+    function add_cri(x, y, u) { add_sel(x, y, ""+u, u+'^', u, 0, color_blue_off, color_blue_on, 'black', color_fond); }
+    function add_cf(x, y, u) {  add_sel(x, y, ""+u, u+'^', u, 0, color_red_off, color_red_on, 'black', color_fond); }
+    function add_cfinv(x, y, u) { add_sel(x, y, "inv", u+'^', u, 1, color_yellow_off, color_yellow_on, 'black', color_fond); }
+    function add_bled(x, y, txt, u)
+    {
+        add_bp(x, y, txt, u+"^", u, color_yellow_off, color_yellow_on, 'black', 'black');
+        draw_text(x, y+.35, u);
+    }
+    function add_geo(x, y, txt, num) { add_geo_bp(x, y, txt, num, color_white_off, color_white_on, col_border='black', col_txt='black'); }
+    function add_occ(x,y,i) { add_voy(x, y, 'r', .4, .2, 'i'+i, "#cccccc", "#ff0000", 'black', 'i'+i); add_cmd(x, y, 'i'+i+'^'); }  //UU pour dbg
+    function add_line_dir(x1, y1, x2, y2, aig) { add_line(x1, y1, x2, y2, 2, 'white', "d"+aig, 'blue'); }
+    function add_line_dev(x1, y1, x2, y2, aig) { add_line(x1, y1, x2, y2, 2, 'white', "e"+aig, 'blue'); }
+    function add_aig(xc, yc, xd, yd, xe, ye, aig)
+    {
+        add_line_dir(xc, yc, xd, yd, aig);
+        add_line_dev(xc, yc, xe, ye, aig);
+        add_cmd(xc, yc, "t"+aig+"^");
+        draw_text(xc, yc+.2, "a"+aig);
+    }
+    function add_eclise(x,y) { draw_rect(x, y, 0.1, 0.1, "#0000ff"); }
+
+    scale(27,14); add_fond(0, 0, 27, 14, color_fond, color_grille, 0);
+    add_cmd(0,0,"tco0"); draw_text(0,0,"tco0");
+    add_cmd(1,0,"loc");  draw_text(1,0,"loc");
+    add_cmd(2,0,"Menu"); draw_text(2,0,"Menu");
+    var X=-1;
+
+    // partie visible nord
+    add_line(5, 2, 6, 2); // 1 tunnel
+    add_line(X, X, 7, 2); // 1 maison
+    add_line(X, X, 12, 2); // 5 viaduc 6a
+
+    var xg=12; var yg=2;
+    add_aig(xg, yg, xg+1, yg, xg+1, yg-1, 8); add_line(X, X, xg+5, yg-1); add_line(X, X, xg+5+4, yg-1); add_aig(xg+10, yg, xg+9, yg, xg+9, yg-1, 9);
+    add_line(xg+1,yg,xg+8,yg); add_aig(xg+9, yg, xg+8, yg,xg+8.5, yg+0.5, 10);
+    add_line(xg+5, yg+1, xg+8, yg+1); add_aig(xg+8, yg+1, xg+9, yg+1, xg+8.5, yg+0.5, 10); add_line(xg+9, yg+1, xg+10, yg+1);
+
+    // partie visible est
+    add_line(22, 2, 23, 2); add_line(X, X, 24, 3); add_line(X, X, 24, 7); add_line(X, X, 23, 8); add_line(X, X, 22, 8);
+
+    // partie visible sud
+    add_line(X, X, 11, 8); // passerelle
+    add_line(X, X, 12, 8); // tunnel
+    add_line(X, X, 17, 8); // viaduc rouzet
+    add_line(X, X, 22, 8); // la halte
+
+    // partie technique
+    add_aig(7, 8, 6, 7, 6, 8, 0); add_line(6, 8, 3, 8);
+    add_line(3, 8, 2, 7); add_line(X, X, 2, 6); add_aig(2, 6, 2, 5, 3, 5, 1); add_line(2, 5, 2, 3); add_line(X, X, 3, 2); add_line(X, X, 5, 2);
+    add_line(3, 5, 4, 5); add_line(X, X, 6, 7);
+    add_line(7, 8, 8, 8); add_aig(8, 8, 9, 8, 9, 9, 2); add_line(9, 8, 11, 8);
+
+    // coulisse
+    add_aig( 9, 9, 10, 10, 10,  9,  3); add_line(10, 10, 10, 12);  //VA
+    add_aig(10, 9, 11,  9, 11, 10,  4); add_line(11, 10, 11, 12);  //VB
+    add_aig(11, 9, 12,  9, 12, 10,  5); add_line(12, 10, 12, 12);  //VC
+    add_aig(12, 9, 13,  9, 13, 10,  6); add_line(13, 10, 13, 12);  //VD
+    add_aig(13, 9, 14,  9, 14, 10,  7); add_line(14, 10, 14, 12);  //VE
+    add_line(14,9, 15, 10);             add_line(15, 10, 15, 12);  //VF
+
+    // eclises
+                     add_eclise(13,1); add_eclise(17,1);
+    add_eclise(5,2); add_eclise(13,2); add_eclise(17,2); add_eclise(22.5,2);
+    add_eclise(20.5,2.5); add_eclise(20.5,3);
+    add_eclise(2,5);
+    add_eclise(6,7);
+    add_eclise(6,8); add_eclise(11,8); add_eclise(16.5,8); add_eclise(22.5,8);
+    add_eclise(9.5,9.5); add_eclise(10.5,9.5); add_eclise(11.5,9.5); add_eclise(12.5,9.5); add_eclise(13.5,9.5); add_eclise(14.5,9.5);
+
+    // boutons/feux/voyants
+    add_occ(9,11,10);
+    add_geo(10,10,'A',5); add_geo(11,10,'B',6); add_geo(12,10,'C',7); add_geo(13,10,'D',8); add_geo(14,10,'E',9); add_geo(15,10,'F',10);
+    add_cr(10, 11, "u1"); add_cr(11, 11, "u2"); add_cr(12, 11, "u3"); add_cr(13, 11, "u4"); add_cr(14, 11, "u5"); add_cr(15, 11, "u5");  //u6 normalement, u5 pour l'instant
+
+    add_cri(15,  1, "u10"); add_cri(19,  1, "u11"); add_cri(15,  2, "u8"); add_cri(19,  2, "u9"); add_cr(2,  4, "u0");
+    add_cfinv(6, 6, "u27");
+
+    add_geo( 4,2,'Ex1',1); add_geo(4,5,'Bcl',2); add_geo(4,8,'T',3); add_geo(10,8,'Ex2',4);
+    add_geo(16,2,'V1',11); add_geo(16,1,'V2',12);
+
+    add_geo_cmd2(1, 11, "t8-"); add_geo_cmd2(1, 12, "t8/"); add_geo_cmd2(4, 11, "t10-t9-"); add_geo_cmd2(4, 12, "t9/"); // V1&2
+    add_geo_cmd2(3, 1, "t1-");  //T-EXT1
+    add_geo_cmd2(3, 4, "t0/t2-");  //T-EXT2
+    add_geo_cmd2(3, 2, "t1/");  //T-BCL
+    add_geo_cmd2(4, 2, "t0-t2-");  //EXT2-BCL
+    add_geo_cmd2(3, 5, "t0/t2/t3-"); add_geo_cmd2(3, 6, "t0/t2/t3/t4/"); add_geo_cmd2(3, 7, "t0/t2/t3/t4-t5/"); //T-A..F
+    add_geo_cmd2(3, 8, "t0/t2/t3/t4-t5-t6/"); add_geo_cmd2(3, 9, "t0/t2/t3/t4-t5-t6-t7/"); add_geo_cmd2(3, 10, "t0/t2/t3/t4-t5-t6-t7-"); //T-A..F
+    add_geo_cmd2(2, 5, "t0-t2/t3-"); add_geo_cmd2(2, 6, "t0-t2/t3/t4/"); add_geo_cmd2(2, 7, "t0-t2/t3/t4-t5/"); //BCL-A..F
+    add_geo_cmd2(2, 8, "t0-t2/t3/t4-t5-t6/"); add_geo_cmd2(2, 9, "t0-t2/t3/t4-t5-t6-t7/"); add_geo_cmd2(2, 10, "t0-t2/t3/t4-t5-t6-t7-"); //BCL-A..F
+
+    add_occ(10,2,3);
+    add_occ(14,1,7); add_occ(18,1,8); add_occ(14,2,5); add_occ(18,2,6);    add_occ(18,3,9); add_occ(21.5,3,10);
+    add_occ(24,5,4);
+    add_occ(18,8,11); add_occ(14,8,12);
+    add_occ(7.5,8,0); add_occ(5,6,1); add_occ(5,8,1); add_occ(2,7,1); add_occ(2.5,2.5,2);
+
+    add_feu(22, 1.5 , "u20", "#888888", "#ff0000", "S1", 'black', 1, "black"); add_cf(22, 0, "u20");
+    add_feu(12, 2.05, "u21", "#888888", "#ff0000", "S2", 'black', 4, "black"); add_cf(12, 3, "u21");
+    add_feu(22, 7.95, "u22", "#888888", "#ff0000", "D3", 'black', 1, "black"); add_cf(22, 7, "u22");
+    add_feu(6 , 1.95, "u23", "#888888", "#ff0000", "D4", 'black', 1, "black"); add_cf( 6, 1, "u23");
+    //add_bmvu(20, 9, 'black', "BLOCK cote", "EX-B"   , 'white', 80);
+    //add_bmvu(24, 9, 'black', "BLOCK coté", "GARE G1", 'white', 88);
+    //add_bmvu(17, 9, 'black', "BLOCK cote", "EX-A"   , 'white', 64);
+    //add_bmvu( 1, 9, 'black', "BLOCK coté", "GARE G1", 'white', 72);
+
+    add_cf(25,3,"u24"); draw_text(25,3.4,"PN1");
+    add_cf(19,7,"u25"); draw_text(19,7.4,"PN2");
+
+    add_bled(13, 5, "Q"   , "u30");
+    add_bled(14, 5, "L"   , "u31");
+    add_bled(15, 5, "BV"  , "u32");
+    add_bled(16, 5, "BVh" , "u33");
+    add_bled(17, 5, "H"   , "u34");
+    add_bled(18, 5, "R"   , "u35");
+    add_bled(19, 5, "M1"  , "u36");
+    add_bled(20, 5, "M1.h", "u37");
+    add_bled(21, 5, "M2"  , "u38");
+    add_bled(22, 5, "M2.h", "u39");
+
+    add_bled( 7, 0, "M"   , "u40");
+
+    add_bled(15, 6, "Q"   , "u50");
+    add_bled(16, 6, "L"   , "u51");
+    add_bled(17, 6, "BV"  , "u52");
+    add_bled(18, 6, "BVh" , "u53");
+
+    add_bled(24, 0, "S"   , "u60");
+    add_bled(25, 0, "L"   , "u61");
+    add_bled(25, 1, "PN"  , "u62");
+
+
+    // un peu de serigraphie
+    draw_rect(16, 0.5, 6, .4, "", "#808080", "quai2" , "#808080");
+    draw_rect(16, 2.5, 6, .4, "", "#808080", "quai1" , "#808080");
+    draw_rect(16,   3, 1, .6, "", "#808080", "BV"    , "#808080");
+
+    draw_rect(20.5, 8.3, 2, .4, "", "#808080", "quaiH" , "#808080");
+
+    draw_rect(19, 8, .2, 1, "", "#808080", "" , "#808080");
+    draw_rect(24, 3, 1, .2, "", "#808080", "" , "#808080");
+}
+
+//  TCO 3
+
+function tco3_init()
+{
+    // fond
+    scale(30,15);
+    add_fond(0,0,30,15,color_fond,color_grille);
+    //add_fond(0,0,30,6,"#333333",""); const col_txt_c_cv = "#ffffff"; const col_txt_visi = "#ffffff"; const col_txt_low = "#000000";
+    const col_txt_c_cv = "#000000"; const col_txt_visi = "#000000"; const col_txt_low = "#d0d0d0";
+
+    // fonctions pour faciliter la creation de ce tco
+    function add_cf(x, y, u, txt) { add_sel(x, y, "", u+'^', u, 0, color_red_off, color_red_on, 'black', color_fond); draw_text(x, y-1, txt, ct="#000000"); }
+    function add_c( x, y, u, txt, dir) { add_feu(x, y, u, "#888888", "#ff0000", txt, col_txt_c_cv, dir, "black"); }
+    function add_cv(x, y, u, txt, dir) { add_feu(x, y, u, "#888888", "#ff00ff", txt, col_txt_c_cv, dir, "black"); }
+    const haut=1; const bas=4;
+
+    function add_da(x, y, u, txt) { add_bp( x, y, txt, u+'^', u, color_orange_off, color_orange_on, 'black', 'black'); }
+    function add_tp(x, y, u, txt) { add_bp( x, y, txt, u+'^', u, color_white_off , color_white_on , 'black', 'black'); }
+    function add_geo(x, y, txt, num) { add_geo_bp(x, y, txt, num, color_white_off, color_white_on, col_border='black', col_txt='black'); }
+
+    function add_za(x1,y1,x2,y2,i,da,tp) { add_line(x1, y1, x2, y2, 2, '#cccccc', da, "#ffff00", tp, "#00ff00", i, '#ff0000', 1); }
+    function add_zv(x1,y1,x2,y2,i,da,tp) { add_line(x1, y1, x2, y2, 2, '#cccccc', da, "#ffff00", tp, "#00ff00", i, '#ff0000', 0); }
+    function add_i(x,y,i) { add_voy(x, y, 'o', .2, .2, 'i'+i, "#cccccc", "#ff0000", 'black', 'i'+i); add_cmd(x, y, 'i'+i+'^'); }  //UU pour dbg
+    function add_eclise(x,y) { draw_rect(x, y, 6/case_dx, 6/case_dy, "#0000ff"); }
+
+    // assignation des variables u
+    // u 0-11 cf
+    // u20-51 da/tp
+    // u60-71 c/cv
+    // u80-95 bmvu
+
+    // quelques constantes pour donner des noms aux iti en alias des variables u
+    var c1_g="u20,"; var c1_3="u21,"; var c1_1="u22,"; var c1_1p="u23,";
+    var cv3_g="u24,"; var cv3_3="u25,"; var cv3_1="u26,";
+    var cv5_g="u27,"; var cv5_3="u28,"; var cv5_1="u29,";
+
+    var cv14_d="u30,"; var cv14_v2="u31,";
+    var c12_d="u32,"; var c12_v2="u33,";
+    var c10_d="u34,"; var c10_v2="u35,";
+    var c8_v2="u37,"; var c8_v2p="u38,";
+
+    var c9_vu="u39,"; var c9_v1="u40,";
+    var c7_vu="u41,"; var c7_v1="u42,"; var c7_v1p="u43,";
+
+    var c6_3="u44,"; var c6_1="u45,";
+    var cv4_3="u46,"; var cv4_1="u47,";
+    var c2_3="u48,"; var c2_1="u49,"; var c2_2="u50,"; var c2_2p="u51,";
+
+    // ajout des lignes (dynamiques)
+    add_za(7,2,8,1,"i5",cv5_g+c1_g+cv3_g+cv14_d+cv14_v2,""); add_za(8,1,11,1,"",c1_g+cv3_g+cv5_g,"");
+    //--------------------
+    add_zv(2,2,4,2,"",cv14_d+c12_d+c10_d,"");
+    add_za(4,2,7,2,"i5",cv14_d+c12_d+cv5_g+cv5_3,""); add_za(7,2,8,2,"i5",cv5_3+c1_3+cv3_3+c12_d+c12_v2,"");
+    add_zv(8,2,14,2,"i2",cv5_3+c1_3+cv3_3+c6_3+cv4_3+c2_3,"");
+    add_za(14,2,17,2,"i8",c9_vu+c6_3,"");
+    add_zv(17,2,19,2,"i11",c9_vu+c7_vu,"");
+    //--------------------
+    add_za(4,2,4.5,2.5,"i5",cv5_1+c10_d,"");                          add_za(4.5,2.5,5,3,"i4",cv5_1+c10_d,"");
+    add_za(6,3,6.5,2.5,"i4",cv3_g+cv3_3+c1_g+c1_3+cv14_v2+c12_v2,""); add_za(6.5,2.5,7,2,"i5",cv3_g+cv3_3+c1_g+c1_3+cv14_v2+c12_v2,"");
+    add_za(14,2,14.5,2.5,"i8",c9_v1+c2_3+cv4_3,"");                   add_za(14.5,2.5,15,3,"i7",c9_v1+c2_3+cv4_3,"");
+    add_za(16,3,16.5,2.5,"i7",c7_vu+c6_1,"");                         add_za(16.5,2.5,17,2,"i8",c7_vu+c6_1,"");
+    //--------------------
+    add_zv(2,3,4,3,"i13","","");
+    add_za(4,3,5,3,"i4",c1_g+c1_3+c1_1,c1_1p); add_za(5,3,6,3,"i4",c1_g+c1_3+c1_1+cv5_1+c10_d,c1_1p); add_za(6,3,8,3,"i4",cv3_1+c1_1+cv5_1+c10_d+c10_v2,c1_1p);
+    add_zv(8,3,14,3,"i1",cv5_1+c1_1+cv3_1+c6_1+cv4_1+c2_1,c1_1p);
+    add_za(14,3,15,3,"i7",c7_vu+c7_v1+c6_1+cv4_1+c2_1,c7_v1p);  add_za(15,3,16,3,"i7",c9_v1+c7_vu+c7_v1+cv4_3+cv4_1+c6_1,c7_v1p); add_za(16,3,17,3,"i7",c9_v1+c7_v1+cv4_3+cv4_1,c7_v1p);
+    add_zv(17,3,19,3,"i10",c9_v1+c7_v1,c7_v1p);
+    //------------------------ il faudra les doubler
+    add_za(5,4,5.5,3.5,"i3",cv3_1+cv3_3+cv3_g+c10_v2+c12_v2+cv14_v2,""); add_za(5.5,3.5,6,3,"i4",cv3_1+cv3_3+cv3_g+c10_v2+c12_v2+cv14_v2,"");
+    add_za(15,3,15.5,3.5,"i7",c2_1+c2_3,"");                             add_za(15.5,3.5,16,4,"i6",c2_1+c2_3,"");
+    //--------------------
+    add_zv(2,4,4,4,"i12",cv14_v2+c12_v2+c10_v2+c8_v2,c8_v2p);
+    add_za(4,4,5,4,"i3",cv14_v2+c12_v2+c10_v2+c8_v2+cv3_g+cv3_3+cv3_1,c8_v2p); add_za(5,4,8,4,"i3",c8_v2,c8_v2p);
+    add_zv(8,4,14,4,"i0",c2_2,c2_2p);
+    add_za(14,4,16,4,"i6",c2_2,c2_2p); add_za(16,4,17,4,"i6",c2_2+c2_1+c2_3,c2_2p);
+    add_zv(17,4,19,4,"i9","","");
+
+    // ajot des eclises
+    add_eclise(4,2); add_eclise(4,3); add_eclise(4,4);
+    add_eclise(4.5,2.5); add_eclise(6.5,2.5); add_eclise(5.5,3.5);
+    add_eclise(8,1); add_eclise(8,2); add_eclise(8,3); add_eclise(8,4);
+
+    add_eclise(14,2); add_eclise(14,3); add_eclise(14,4);
+    add_eclise(14.5,2.5); add_eclise(16.5,2.5); add_eclise(15.5,3.5);
+    add_eclise(17,2); add_eclise(17,3); add_eclise(17,4);
+
+    // ajout des CF, BP(DA,TP), feux  (hors test, mettre c/cv en u60-71 a la place de u0-u11
+    add_cf(2,7,"u2","Cv5"  ); add_cv(4,2,"u62","cv5",haut); add_da(2,8,"u27","G"); add_da(2,9,"u28","3"); add_da(2,10,"u29","1");
+    add_cf(3,7,"u0","C1"   ); add_c( 4,3,"u60", "c1",haut); add_da(3,8,"u20","G"); add_da(3,9,"u21","3"); add_da(3,10,"u22","1"); add_tp(3,11,"u23","1");
+    add_cf(4,7,"u1","Cv3"  ); add_cv(4,4,"u61","cv3",haut); add_da(4,8,"u24","G"); add_da(4,9,"u25","3"); add_da(4,10,"u26","1");
+
+    add_cf(6,7,"u3","Cv14" ); add_cv(8.2,1,"u63","cv14",bas); add_da(6,8,"u30","D"); add_da(6,9,"u31","V2");
+    add_cf(7,7,"u4","C12"  ); add_c( 8,2,"u64", "c12",bas); add_da(7,8,"u32","D"); add_da(7,9,"u33","V2");
+    add_cf(8,7,"u5","C10"  ); add_c( 8,3,"u65", "c10",bas); add_da(8,8,"u34","D"); add_da(8,9,"u35","V2");
+    add_cf(9,7,"u6","C8"   ); add_c( 8,4,"u66",  "c8",bas);     add_da(9,9,"u37","V2"); add_tp(9,10,"u38","V2");
+
+    add_cf(11,7,"u7","C9"  ); add_c(14,2,"u67","c9",haut);  add_da(11,8,"u39","VU"); add_da(11,9,"u40","V1");
+    add_cf(12,7,"u8","C7"  ); add_c(14,3,"u68","c7",haut);  add_da(12,8,"u41","VU"); add_da(12,9,"u42","V1");  add_tp(12,10,"u43","V1");
+
+    add_cf(14,7,"u9","C6"  ); add_c( 17.2,2,"u69", "c6",bas);  add_da(14,8,"u44","3"); add_da(14,9,"u45","1");
+    add_cf(15,7,"u10","Cv4"); add_cv(17,3,"u70","cv4",bas);  add_da(15,8,"u46","3"); add_da(15,9,"u47","1");
+    add_cf(16,7,"u11","C2" ); add_c( 17,4,"u71", "c2",bas);  add_da(16,8,"u48","3"); add_da(16,9,"u49","1"); add_da(16,10,"u50","2"); add_tp(16,11,"u51","2");
+
+    add_bmvu(18, 8, 'black', "BLOCK cote", "GARE VU", 'white', 80);
+    add_bmvu(22, 8, 'black', "BLOCK coté", "GARE VU", 'white', 88);
+    add_c(19,2,"u87", "s1",haut);
+
+    // boutons geo et leurs commandes
+    add_geo( 3,2,'D',1); add_geo(3,3,'V1',2); add_geo(3,4,'V2',3);
+    add_geo(10,1,'G',10); add_geo(10,2,'3',11); add_geo(10,3,'1',12); add_geo(10,4,'2',13);
+    add_geo(18,2,'VU',20); add_geo(18,3,'V1',21); add_geo(18,4,'V2',22);
+
+    add_geo_cmd(2,10,"u20+"); add_geo_cmd(2,11,"u21+"); add_geo_cmd(2,12,"u22+");
+    add_geo_cmd(3,10,"u24+"); add_geo_cmd(3,11,"u25+"); add_geo_cmd(3,12,"u26+");
+    add_geo_cmd(1,10,"u27+"); add_geo_cmd(1,11,"u28+"); add_geo_cmd(1,12,"u29+");
+
+    add_geo_cmd(10,1,"u30+"); add_geo_cmd(10,3,"u31+");
+    add_geo_cmd(11,1,"u32+"); add_geo_cmd(11,3,"u33+");
+    add_geo_cmd(12,1,"u34+"); add_geo_cmd(12,3,"u35+");
+       add_geo_cmd(13,3,"u37+");
+
+    add_geo_cmd(11,20,"u39+"); add_geo_cmd(11,21,"u40+");
+    add_geo_cmd(12,20,"u41+"); add_geo_cmd(12,21,"u42+");
+
+    add_geo_cmd(20,11,"u44+"); add_geo_cmd(20,12,"u45+");
+    add_geo_cmd(21,11,"u46+"); add_geo_cmd(21,12,"u47+");
+    add_geo_cmd(22,11,"u48+"); add_geo_cmd(22,12,"u49+"); add_geo_cmd(22,13,"u50+");
+
+    // un peu de serigraphie
+    function draw_s(x,y,txt) { draw_text(x, y, txt, col_txt_visi); }
+    draw_s(1.7,2,"D"); draw_s(1.7,3,"V1"); draw_s(1.7,4,"V2");
+    draw_s(11.2,1,"G"); draw_s(12,2-.2,"3"); draw_s(12,3-.2,"1"); draw_s(12,4-.2,"2");
+    draw_s(19.3,2,"VU"); draw_s(19.3,3,"V1"); draw_s(19.3,4,"V2");
+
+    draw_rect(11, 2.5, 5, .4, "", "#808080", "quai2" , "#808080");
+    draw_rect(11, 4.5, 5, .4, "", "#808080", "quai1" , "#808080");
+    draw_rect(11,   5, 1, .6, "", "#808080", "BV"    , "#808080");
+    draw_rect( 6,   1, 1, .6, "", "#808080", "poste1", "#808080");
+
+    function draw_z(x,y,txt) { draw_text(x,y+.1,txt,col_txt_low); }
+    draw_z(2.2,3,"z13"); draw_z(2.2,4,"z12");
+    draw_z(6,2,"z5"); draw_z(7,3,"z4"); draw_z(6,4,"z3");
+    draw_z(11,2,"z2"); draw_z(11,3,"z1"); draw_z(11,4,"z0");
+    draw_z(15.5,2,"z8"); draw_z(15.5,3,"z7"); draw_z(15,4,"z6");
+    draw_z(19-.3,2,"z11"); draw_z(19-.3,3,"z10"); draw_z(19-.3,4,"z9");
+    draw_z(4-.2,2,"a0"); draw_z(5,3,"a1"); draw_z(5,4,"a2"); draw_z(7.2,2,"a3"); draw_z(6,3,"a4");
+    draw_z(14-.2,2,"a5"); draw_z(15-.2,3,"a6"); draw_z(16,4,"a7"); draw_z(16,3,"a8"); draw_z(17,2-.3,"a9");
+
+    // debug de i
+    for(var i=0; i<14; i+=1) add_i(2+i,13,i);
+
+    // change tco
+    add_cmd(0,0,"tco0"); draw_text(0,0,"tco0");
+    add_cmd(1,0,"loc");  draw_text(1,0,"loc");
+    add_cmd(2,0,"Menu"); draw_text(2,0,"Menu");
+}
+
+//  TCO 4
+
+function tco4_init()
+{
+    scale(2,4);
+    add_fond(0, 0, 2, 4, color_fond, color_grille, 0);
+    add_cmd(0,0,"tco0");
+    draw_text(0,0,"tco0","black");
+}
+
+//  TCO 5
+
+function tco5_init()
+{
+    scale(16,12);
+    add_fond(0, 0, 16, 12, color_fond, color_grille, 0);
+    add_cmd(0,0,"tco0"); draw_text(0,0,"tco0","black");
+
+    edit_add_aig(4,4,5,4,5,3,0);
+    edit_add_aig(11,4,10,4,10,3,1);
+    edit_add_aig(12,4,11,4,11,5,2);
+
+    add_line(5,4,10,4);
+    add_line(5,3,10,3);
+    add_line(11,5,8,5);
+    add_line(12,4,13,4);
+    add_line(13,4,14,3);
+    add_line(14,3,14,2);
+    add_line(14,2,13,1);
+    add_line(13,1,3,1);
+    add_line(3,1,2,2);
+    add_line(2,2,2,3);
+    add_line(2,3,3,4);
+    add_line(3,4,4,4);
+
+    edit_add_occ(7,4,0);
+    edit_add_occ(7,3,1);
+    edit_add_occ(7,1,2);
+    edit_add_occ(9,5,3);
+
+    draw_rect(6.5,5,1.9,0.8, "", "#808080","BV","#808080");
+    draw_rect(9,6,0.9,0.8, "", "#808080","H","#808080");
+    draw_rect(11,1,0.9,2, "", "#808080","PN","#808080");
+
+    edit_add_btn(6,7,"BV",10);
+    edit_add_btn(7,7,"Q",11);
+    edit_add_btn(9,7,"H",12);
+    edit_add_sel(11,7,13);
+}
+
+//  TCO 6
+
+function tco6_init()
+{
+    scale(30,15);
+    add_fond(0, 0, 30, 15, color_fond, color_grille);
+
+    // draw static widget
+    draw_line(7,1,8,1,"black",1);
+    draw_line(9,1,19,1,"black",1);
+    draw_line(9,0,19,0,"black",1);
+
+    // add dynamic widget & cmds
+
+    // det
+    add_voy(11, 1, 'r', .5, .2, 'i1', color_red_off, color_red_on, "#ffffff" ,"det1", "#000000");
+    add_cmd(11,1,'i1^');
+
+    // aig
+    add_cmd(8,1,"t10^");
+    add_voy( 8.25, 1-.25, 'o', .2, .2, 'e10', "#cccc00", "#ffff00");
+    add_voy( 8.25, 1+.0 , 'o', .2, .2, 'd10', "#cccc00", "#ffff00");
+    add_line(8, 1, 9, 0, 2, 'white', "e10", 'red');
+    add_line(8, 1, 9, 1, 2, 'white', "d10", 'red');
+
+    // feu tco
+    add_feu(12,1,"u0","#888888","#ff0000","c6"  ,"black",1,"black");
+    add_feu(13,1,"u0","#888888","#ff0000","cv12","black",2,"black");
+    add_feu(14,1,"u0","#888888","#ff0000","c1"  ,"black",3,"black");
+    add_feu(15,1,"u0","#888888","#ff0000","c3"  ,"black",4,"black");
+
+    // sel/bp
+    draw_text(12, 4, "C7");
+    add_sel(12, 5, "", "u14^", "u14", 1, color_red_off, color_red_on   , 'black', color_fond, 'black');   //add_cmd(12,5,"u14^")
+    add_bp( 12, 6, "VU", "u0^", "u0", color_orange_off, color_orange_on, 'black', 'black');
+    add_bp( 12, 7, "V1", "u1^", "u1", color_orange_off, color_orange_on, 'black', 'black');
+    add_bp( 12, 8, "V1", "u2^", "u2", color_green_off , color_green_on , 'black', 'black');
+
+    //geo
+    add_geo_bp(14, 6, "A", 0, color_white_off, color_white_on, col_border='black', col_txt='black');
+    add_geo_bp(14, 7, "B", 1, color_white_off, color_white_on, col_border='black', col_txt='black');
+    add_geo_bp(14, 8, "C", 2, color_white_off, color_white_on, col_border='black', col_txt='black');
+    add_geo_cmd(0, 1, "u0+");
+    add_geo_cmd(0, 2, "u1+");
+    add_geo_cmd(1, 0, "u2+");
+
+    // bmvu
+    add_bmvu(0, 2, 'black', "BLOCK côté", "A", 'white', 40);    //40-45 + 46 pour voy vl, 47 pour voy shem
+    add_bmvu(3, 2, 'black', "BLOCK cote", "B", 'white', 48);    //48-53 + 54 pour voy vl, 55 pour voy shem
+
+    // change tco
+    add_cmd(0,0,"tco0"); draw_text(0,0,"tco0");
+
+    // line
+    add_line(12-.5, 3, 12+.5, 3); // static
+    add_line(13-.5, 3, 13+.5, 3, 2, "#0000ff"); // static size2 blue
+    add_line(14-.5, 3, 14+.5, 3, 2, 'black', "i1", 'red'); // dynamic det
+    add_line(15-.5, 3, 15+.5, 3, 2, 'black', "u0,u1", "#ffff00", "u2", "#00ff00", "i1", '#ff0000', 1); // dynamic iti za
+    add_line(16-.5, 3, 16+.5, 3, 2, 'black', "u0,u1", color_yellow_on, "u2", color_green_on, "i1", 'red'); // dynamic iti not za
+}
+
+//  TCO 7
+
+function tco7_init()
+{
+    scale(17,6);
+    add_fond(0, 0, 17, 6, color_fond2, color_grille);
+
+    add_bmvu(1, 1, 'black', "BLOCK cote", "B", 'white', 80);
+    add_bmvu(6, 1, 'black', "BLOCK coté", "A", 'white', 88);
+
+    add_bmvu(9, 1, 'black', "BLOCK côté", "C", 'white', 176);
+    add_bmvu(14,1, 'black', "BLOCK côté", "B", 'white', 184);
+
+    draw_text(1.5,5,"gareA");
+    draw_text(8,5,"gareB");
+    draw_text(14.5,5,"gareC");
+
+    //add_bp(6, 1, "U0", 'u0^', 'u0', color_red_off, color_red_on, 'black', 'black');
+    //add_bp(6, 2, "AU", 'au^', 'au', color_red_off, color_red_on, 'black', 'black');
+    //add_bp(6, 3, "U1", 'u1^', 'u1', color_red_off, color_red_on, 'black', 'black');
+
+    add_cmd(0,0,"tco0");
+    draw_text(0,0,"tco0");
+}
+
+//  TCO 8
+
+function tco8_init()
+{
+    function add_i(x,y,i)
+    {
+        add_voy(x, y, 'o', .4, .4, 'i'+i, "#ff0000", "#00ff00", 'black');
+        draw_text(x, y+.4, 'i'+i, ct="#ffffff");
+        //add_cmd(x, y, 'i'+i+'^');
+    }
+
+    scale(17,10);
+    add_fond(0, 0, 17, 10, 'black', 'black');
+    add_cmd(0,0,"tco0"); draw_text(0,0,"tco0",'white');
+
+    for(var i=0; i<=63; i++)
+    {
+        var x = i & 15; if(x>=8) x++;
+        var y = 1 + 2* (i >> 4);
+        add_i(x, y, i);
+    }
+}
+
+//  TCO 9
+
+function tco9_init()
+{
+    function add_line_dir(x1, y1, x2, y2, aig) { add_line(x1, y1, x2, y2, 2, '#cccccc', "d"+aig, 'blue'); }
+    function add_line_dev(x1, y1, x2, y2, aig) { add_line(x1, y1, x2, y2, 2, '#cccccc', "e"+aig, 'red'); }
+    function add_aig(xc, yc, xd, yd, xe, ye, aig)
+    {
+        add_line_dir(xc, yc, xd, yd, aig);
+        add_line_dev(xc, yc, xe, ye, aig);
+        add_cmd(xc, yc, "t"+aig+"^");
+        draw_text(xc, yc+.2, "a"+aig, 'white');
+    }
+
+    scale(16,12);
+    add_fond(0, 0, 16, 12, '#0f0f0f', '#0f0f0f');
+    add_cmd(0,0,"tco0"); draw_text(0,0,"tco0",'white');
+
+    for(var i=0; i<=47; i++)
+    {
+        var x = 2 * (i & 7);
+        var y = 2 * (i >> 3) + 1;
+        add_aig(x, y, x+1, y, x+1, y-1, i );
+    }
+}
+
+//  TCO 10
+
+function tco10_init()
+{
+    function add_u(x,y,i)
+    {
+        add_bp(x, y, 'u'+i, 'u'+i+'^', 'u'+i, "#cccccc", "#00ff00", 'black', 'black');
+    }
+
+    scale(17,10);
+    add_fond(0, 0, 17, 10, 'black', 'black');
+    add_cmd(0,0,"tco0"); draw_text(0,0,"tco0",'white');
+
+    for(var i=0; i<=63; i++)
+    {
+        var x = i & 15; if(x>=8) x++;
+        var y = 1 + 2* (i >> 4);
+        add_u(x, y, i);
+    }
+}
+
+//  Outil d'edition des TCOs
+
+var edit_on=0;
+var edit_op="";
+var edit_step=0;
+var edit_x;
+var edit_y;
+var edit_xc;
+var edit_yc;
+var edit_res=""; //resultat.
+
+function edit_redraw()
+{
+    forceUpdate = 1; // to have all variables declared as changed at first notification
+    notify_update();  // to draw initial state (with forceUpdate)
+    forceUpdate = 0;
+}
+
+var copyText;
+function copyToClipboard(text)
+{
+    /*var*/ copyText = document.createElement("input");
+    copyText.type = "text";
+    document.body.appendChild(copyText);
+    copyText.style = "display: inline; width: 1px;";
+    copyText.value = text;
+    copyText.focus();
+    document.execCommand("SelectAll");
+    document.execCommand("Copy");
+    //copyText.remove();
+}
+
+var textarea=0;
+function copyToClipboard2(text)
+{
+    if(textarea!=0) remove_textarea();
+
+    textarea = document.createElement('textarea');
+    textarea.innerHTML = text;
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    textarea.cols = "80";
+    textarea.rows = "40";
+    //textarea.remove(); // marche pas
+    //document.body.removeChild(textarea);  //ok
+}
+
+function remove_textarea()
+{
+    if(textarea==0) return;
+    document.body.removeChild(textarea);
+    textarea=0;
+}
+
+var edit_u=0; var edit_i=0; var edit_a=0;
+function edit_click_xy(x, y)
+{
+    if(x==0 && y==0)
+    {
+        var msg = "operation ?";
+        msg += "\n\nl add_line(pt1,pt2)  /  a add_aig(coeur,direct,devie)";
+        msg += "\nb add_bp  /  s add_sel  /  v add voy  /  f add feu  /  g add_geo";
+        msg += "\nt add txt  / r add rect";
+      //msg += "\n\n- e mode edition\n- x mode execution";
+        msg += "\nw afficher les fonctions  / q quitter (penser a sauver avant)";
+        edit_op = prompt(msg, "l");
+        edit_step=0;
+
+        //if(edit_op=="e") edit_on=1;
+        //if(edit_op=="x") edit_on=0;
+
+        if(edit_op=="w")
+        {
+            copyToClipboard2(edit_res);  //copyToClipboard2("Hello wold!\n\rUlysse.");
+        }
+
+        if(edit_op=="k")
+        {
+            remove_textarea();
+        }
+
+        if(edit_op=="q")
+        {
+            if(confirm("Voulez vous quitter le mode edition ?\n\n(Votre travail sera perdu si vous ne l'avez pas sauvé)"))
+            {
+                remove_textarea();
+                edit_on=0;
+                change_tco(-1);
+            }
+        }
+
+        if(edit_op=="+")
+        {
+            textarea.value+="\nwazza";
+        }
+
+        return;
+    }
+
+
+    if(edit_on==0) return;
+
+    if(edit_op=="l")
+    {
+        if(edit_step==0) { edit_x=x; edit_y=y; edit_step=1; return;}
+
+        if(edit_step==1)
+        {
+            if(edit_x==x && edit_y==y) { edit_step=0; return; }
+            add_line(edit_x, edit_y, x, y);
+
+            edit_res+="add_line("+edit_x+","+edit_y+","+x+","+y+");\n\r";
+
+            edit_x=x; edit_y=y;
+        }
+    }
+
+    if(edit_op=="a")
+    {
+        if(edit_step==0)
+        {
+            edit_xc=x; edit_yc=y; edit_step=1;
+            return;
+        }
+
+        if(edit_step==1)
+        {
+            edit_x=x; edit_y=y;
+            //add_line_dir(edit_xc, edit_yc, edit_x, edit_y, edit_val);
+            //edit_res+="add_line_dir("+edit_xc+","+edit_yc+","+edit_x+","+edit_y+","+edit_val+");\n\r";
+            edit_step=2;
+            return;
+        }
+
+        if(edit_step==2)
+        {
+            //add_line_dev(edit_xc, edit_yc, x, y, edit_val);
+            var num = prompt("numero de l'aiguillage ?", ""+edit_a); num = parseInt(num,10); edit_a=num+1;
+            edit_add_aig(edit_xc, edit_yc, edit_x, edit_y, x, y, num);
+            edit_res+="edit_add_aig("+edit_xc+","+edit_yc+","+edit_x+","+edit_y+","+x+","+y+","+num+");\n\r";
+            edit_step=0;
+            return;
+        }
+    }
+
+    if(edit_op=="s")
+    {
+        var val = prompt("numero de la variable u du selecteur ?", ""+edit_u);
+        val = parseInt(val,10); edit_u=val+1;
+        edit_add_sel( x, y, val);
+        edit_res+="edit_add_sel("+x+","+y+","+val+");\n\r";
+        edit_redraw()
+    }
+
+    if(edit_op=="b")
+    {
+        var txt = prompt("text ?", "");
+        //var cmd = prompt("cmd ?", "");
+        //var aff = prompt("cmd ?", "");
+        var u = prompt("numero de la variable u du selecteur ?", ""+edit_u); u = parseInt(u,10); edit_u=u+1;
+        edit_add_btn(x, y, txt, u);
+        edit_res+="edit_add_btn("+x+","+y+",\""+txt+"\","+u+");\n\r";
+        edit_redraw();
+    }
+
+    if(edit_op=="v")
+    {
+        var i = prompt("numero de l'entree i ?", ""+edit_i); i = parseInt(i,10); edit_i=i+1;
+        edit_add_occ(x, y, i);
+        edit_res+="edit_add_occ("+x+","+y+","+i+");\n\r";
+        edit_redraw();
+    }
+
+    if(edit_op=="g")
+    {
+        var num = prompt("numero du bouton geo ?", 0); num = parseInt(num,10);
+        var txt = prompt("text ?", "");
+        edit_add_geo(x, y, txt, num);
+        edit_res+="edit_add_geo("+x+","+y+",\""+txt+"\","+num+");\n\r";
+        edit_redraw()
+    }
+
+    if(edit_op=="t")
+    {
+        var txt = prompt("text ?", "");
+        draw_text(x, y, txt);
+        edit_res+="draw_text("+x+","+y+",\""+txt+"\");\n\r";
+    }
+
+    if(edit_op=="r")
+    {
+        if(edit_step==0) { edit_x=x; edit_y=y; edit_step=1; return;}
+
+        if(edit_step==1)
+        {
+            edit_step=0;
+            var xc = (edit_x+x)/2;
+            var yc = (edit_y+y)/2;
+            var dx = 0.45+Math.abs(edit_x-x)/2;
+            var dy = 0.4 +Math.abs(edit_y-y)/2;
+            var txt = prompt("text ?", "");
+            draw_rect(xc, yc, dx, dy, "", "#808080", txt , "#808080");
+            edit_res+="draw_rect("+xc+","+yc+","+dx+","+dy+", \"\", \"#808080\",\""+txt+"\",\"#808080\");\n\r";
+        }
+    }
+
+    if(edit_op=="f")
+    {
+        var txt = prompt("text ?", "");
+        var u = prompt("numero de la variable u du sfeu ?", "0"); u = parseInt(u,10);
+        var pos = prompt("position ? 1=haut>| 2=haut|< 3=bas>| 4=bas|<", "1"); pos = parseInt(pos, 10);
+        edit_add_feu(x,y,txt,u,pos);
+        edit_res+="edit_add_feu("+x+","+y+",\""+txt+"\","+u+","+pos+");\n\r";
+    }
+
+}
+
+// handle
+
+function tco0_notify() {} // ne sont plus utilisees pour l'instant
+function tco1_notify() {}
+function tco2_notify() {}
+function tco3_notify() {}
+function tco4_notify() {}
+function tco5_notify() {}
+function tco6_notify() {}
+function tco7_notify() {}
+function tco8_notify() {}
+function tco9_notify() {}
+function tco10_notify() {}
+
+function change_tco(num)
+{
+    rm_cmd(); // remove cmd list from previous tco
+    rm_sel(); // remove selector list from previous tco
+    rm_bp();
+    rm_voy();
+    rm_line();
+    rm_geo(); rm_geo_cmd();
+
+
+    if(num<0 || num>10) { tco = -1; welcome_page(); return;}
+
+    tco = num;
+    tco_mem = tco;
+    if(tco_mem) tco_btn=tco_mem;
+
+    forceUpdate = 1; // to have all variables declared as changed at first notification
+
+    if(tco==0) tco0_init();
+    if(tco==1) tco1_init(); if(tco==2) tco2_init(); if(tco==3) tco3_init(); if(tco==4) tco4_init(); if(tco==5) tco5_init();
+    if(tco==6) tco6_init(); if(tco==7) tco7_init(); if(tco==8) tco8_init(); if(tco==9) tco9_init(); if(tco==10) tco10_init();
+    console.log("tco changed for tco"+tco);
+
+    notify_update();  // to draw initial state (with forceUpdate)
+
+    forceUpdate = 0;
+}
+
+function notify_update()
+{
+    if(tco==-1) { welcome_notify_rx(); return; }
+
+    console.log("notify_update with forceUpdate="+forceUpdate);
+
+    draw_aLine();
+    draw_aSel();
+    draw_aBp();
+    draw_aVoy();
+    draw_aGeo(); // a hcaque fois et apres line sinon line passet devant geo
+    // UU: dessiner les rectangles des cmds (activables par une constante) ?
+
+    if(tco==0) tco0_notify();
+    if(tco==1) tco1_notify(); if(tco==2) tco2_notify(); if(tco==3) tco3_notify(); if(tco==4) tco4_notify(); if(tco==5) tco5_notify();
+    if(tco==6) tco6_notify(); if(tco==7) tco7_notify(); if(tco==8) tco8_notify(); if(tco==9) tco9_notify(); if(tco==10) tco10_notify();
+}
+
+var cmd_tx = "";
+
+var x_mouse_click = 0;
+var y_mouse_click = 0;
+var x_cell_click = 0;
+var y_cell_click = 0;
+
+
+function is_click_in(xc, yc, dx, dy)
+{
+    if(x_mouse_click < (xc-dx)) return 0;
+    if(x_mouse_click > (xc+dx)) return 0;
+    if(y_mouse_click < (yc-dy)) return 0;
+    if(y_mouse_click > (yc+dy)) return 0;
+
+    return 1;
+}
+
+function is_click_in_cell(cell_x, cell_y)
+{
+    if((x_cell_click == cell_x) && (y_cell_click == cell_y)) return 1;
+    return 0;
+}
+
+function ze_mouse_click()
+{
+
+    if(tco!=-1)
+    {
+        if(edit_on) edit_click_xy(x_cell_click, y_cell_click);
+        else cmd_click(x_cell_click, y_cell_click);
+    }
+
+    else if(tco==-1) welcome_notify_click(x_cell_click, y_cell_click);
+}
+
+function getMousePos(canvas, evt)
+{
+    var rect = canvas.getBoundingClientRect();
+    return { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
+}
+
+function tco_handleClick(evt)
+{
+    //alert('Mouse clicked !');
+    var rect = canvas.getBoundingClientRect();
+    var mousePos = getMousePos(canvas, evt);
+    x_mouse_click = mousePos.x / zoom;
+    y_mouse_click = mousePos.y / zoom;
+    if(grotate)
+    {
+        x_mouse_click = mousePos.y / zoom;
+        y_mouse_click = user_dy - mousePos.x / zoom;
+    }
+    console.log('click x=' + x_mouse_click + " y=" + y_mouse_click);
+    x_cell_click = parseInt(x_mouse_click / case_dx);
+    y_cell_click = parseInt(y_mouse_click / case_dy);
+    console.log('click cx=' + x_cell_click + " cy=" + y_cell_click);
+
+    //ze_mouse_click(x_mouse_click, y_mouse_click);
+    ze_mouse_click();
+}
+
+function tco_add_listeners()
+{
+    canvas.addEventListener('click', tco_handleClick, false);
+}
+
+function tco_remove_listeners()
+{
+    canvas.removeEventListener('click', tco_handleClick);
+}
+
+tco_add_listeners();
+
+
+
+
+
+
+//========================================
+// Partie "LOOP"
+//========================================
+
+function simu(cmd)
+{
+    for(var i=0; i<nbVar; i+=1) old_var[i]=new_var[i];
+    olg_geo_sel = geo_sel;
+
+    var i=0;
+    var t=""
+    var nb=0;
+    while(i<cmd.length)
+    {
+        var c=cmd[i];
+        if(t=='a' && c=='u') t='b'; //au
+        else if(c=='u' || c=='t' || c=='i' || c=='g')
+        {
+            t=c;
+            nb=0;
+        }
+        else if(c>='0' && c<='9')
+        {
+            nb=10*nb+parseInt(c);
+            if(t=='b') { if(nb>1) nb=1; au=nb; setVar(AU,nb); }   //UU: reactiver
+        }
+        else if(c=='^')
+        {
+            if(t=='u') invVar(U+nb);
+            if(t=='i') invVar(I+nb);
+            if(t=='t') { if(getVar(D+nb)==0) { setVar(D+nb,1); setVar(E+nb,0); } else { setVar(D+nb,0); setVar(E+nb,1);} }
+            t='';  //ou nb++ prfaire comme les fcts f
+        }
+        else if(c=='+' || c=='/')
+        {
+            if(t=='u') setVar(U+nb,1);
+            if(t=='i') setVar(I+nb,1);
+            if(t=='t') { setVar(E+nb,1); setVar(D+nb,0); }
+            if(t=='g') geo_click(nb);
+            t='';
+        }
+        else if(c=='-')
+        {
+            if(t=='u') setVar(U+nb,0);
+            if(t=='i') setVar(I+nb,0);
+            if(t=='t') { setVar(E+nb,0); setVar(D+nb,1); }
+            t='';
+        }
+        else t="";
+
+        i+=1;
+    }
+
+    notify_update();
+}
+
+var cpt=0;
+function handleTimer()
+{
+    //if(new_tco != tco) change_tco(new_tco);
+
+    // clearInterval(timer); //on annule jamais le timer
+    cpt++;
+
+    // clignotement du bouton AU
+    // TBD
+
+    //if(ecran=="SOU") sou_handleTimer();
+    sou_handleTimer();  // on le fait maintenant tout le temps, car il peut y avoir l'accelerometre
+
+    script_maj();
+    welcome_notify_timer();
+
+    // build de la commande a envoyer
+
+    rec_cmd(cmd_tx); // rec avant ?
+    rec_in();
+    rec_exe();
+
+    if(cpt & 1)
+    {
+        cmd_tx += "?"; // demande un status 1x/2
+    }
+
+    if(cmd_tx != "")
+    {
+        console.log("cmd_tx", cmd_tx)
+
+        // envoie de la commande
+        if(conn_ok)
+        {
+            if(cmd_tx.length>100) alert("len="+cmd_tx.length);
+            tx_ws(cmd_tx);  // le notify est fait dans le rx
+        }
+
+        else
+        {
+            if(ecran == "TCO") simu(cmd_tx);  // le notify est fait dans simu
+        }
+
+        cmd_tx = "";
+    }
+
+}
+//var timer = setInterval(handleTimer,250); // 4x/sec 250ms    // par mesure de sécurité on active le timer a la fin maintenant
+
+
+
+
+
+
+//========================================
+// Partie "SOURIS"
+//========================================
+
+//  configuration
+
+var couleur_fond_sou  = [ '#5A9BD3', '#D35A5A', '#D3B95A',  '#5AD360', '#9B5AD3', '#5AD3CF', '#B5E61D'   ];  // max 4 screen (apres difficile de naviguer), 3 en spare
+var couleur_fond2_sou = [ '#7E9BD3', '#D17D7D', '#D3D37E',  '#84D188', '#9B7ED3', '#8ED1CF', '#9BC716'   ];
+var couleur_plus = '#8788FB'; var couleur_moins = '#FD8888'
+var couleur_um = [ '#FF0000', '#00FF00', '#0000FF', '#FF00FF' ];
+var couleur_um_used = [ 0, 0, 0, 0 ];
+
+var souris_nb = 12;
+var souris_1x_screen_nb = 4;  // se limiter a 4 pour faciliter de navigation
+var souris_2x_screen_nb = 4;
+var souris_3x_screen_nb = 4;
+var souris_4x_screen_nb = 3;
+
+var souris_type = "1x";   // "1x", "2x", "3x", "4x", autres à venir
+if(typeof(Storage) !== "undefined") // localStorage and sessionStorage supported
+{
+    var val = localStorage.getItem('souris_type');
+    if(val!=null && val!="") souris_type=val;
+}
+
+var aff_souris_img_and_name = 2;  //0=ne pas afficher, 1=afficher, 2=auto=afficher sio au moins une image ou un nom est ajouté avec add_img
+var aff_courant = 1;
+
+
+// variables
+
+var souris_screen = 0;
+
+var souris_dx;
+var souris_dy;
+var couleur_fond; var couleur_fond2;
+var souris_start;
+var cmd_prog = "";
+var au_pressed = 0;
+var au_req = 0;
+
+var last_used_souris = -1;
+var used_souris = -1;
+
+var x_courant = 0;
+var val_courant = 0;
+var val_old_courant = 0;
+
+var souris_y0 = 0;
+
+var acc_listen = 0;
+
+var souris_sel_start_ind = 0;
+var souris_sel_start_inc = 5;
+var souris_sel_screen = 0;
+var souris_sel_list = [];
+
+// class Souris
+function Souris()
+{
+    this.adr = 0;   // 0 = desactivee
+    this.sens = 1;  //1=+=AV 0=-=AR
+    this.vit0_100 = 0;
+    this.f = [ 0, 0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0, 0,0,0,0 ];  // F0-F24
+    this.fStart = 1;  //  1, 9, 17
+    this.acc = 0;
+    this.acc_inv = 0;
+    this.um = 0;   // 0=aucune else adr de la master, =adr si master, - si inv sens
+    this.um_color = 0;
+    this.old_cmd = "";
+    this.old_cmd_f = "";
+
+    this.last_vit = 0;
+    this.last_sens = 1;
+    this.fct_modif = 0;
+    this.adr_modif = 0;
+    this.um_modif = 0;
+    this.acc_modif = 0;
+}
+var aSouris = [];
+for(var i=0; i<souris_nb; i+=1) aSouris.push(new Souris());
+
+
+//  dessin
+
+function souris_sel_get_adr(x, y)
+{
+    var col_nb=1;
+    if(souris_type == "2x") col_nb=2;
+    if(souris_type == "3x") col_nb=3;
+    if(souris_type == "4x") col_nb=4;
+    var x2=parseInt(x/400);
+    var y2=parseInt(y/150);
+    if(x2>=col_nb) return -1;
+    if(y2>=5) return -1;
+    var ind = 5*x2 + y2;
+    if(ind>souris_sel_list.length) return -1;
+    return souris_sel_list[ind];
+}
+
+function draw_souris_sel_screen()
+{
+    var nb=-1;
+    var l=-1;
+    var c=0;
+    var col_nb=1;
+    if(souris_type == "2x") col_nb=2;
+    if(souris_type == "3x") col_nb=3;
+    if(souris_type == "4x") col_nb=4;
+    souris_sel_start_inc = 5 * col_nb;
+    while(souris_sel_list.length) souris_sel_list.pop();
+    
+    for(var i=0; i<img_db.length; i++) if(img_db[i].adr>=1) 
+    {
+        nb++;
+        if(nb>=souris_sel_start_ind)
+        {
+            l++;
+            var adr=img_db[i].adr;
+            var is_adr_used=0;
+            for(var j=0; j<souris_nb; j++) if(aSouris[j].adr==adr) { is_adr_used=1; break; }
+            var x0=400*c;
+            
+            if(is_adr_used)
+            {
+                context.beginPath();
+                context.rect(x0+10, 150*l, 380, 140); //!!! x,y,dx,dy
+                context.fillStyle = "#cccccc";
+                context.fill();
+            }             
+            
+            var pic = img_db[i].img;
+            if(pic!=0) draw_img_in_rect(pic, x0+200, 150*l+50, 380, 100);   //100
+            
+            var color=couleur_fond; if(is_adr_used) color="#cccccc";
+            var name = img_db[i].name + " ($" + adr + ")";
+            sou_draw_txt(x0+200, 150*l+125, 190, 25, 'black', color, name);
+                        
+            souris_sel_list.push(adr);
+            
+            if(l==4) { l=-1; c++; if(c==col_nb) break; }
+        }
+    }
+
+    var y = souris_dy-50;
+    sou_draw_btn( 50,y,45,45,"#888888","<",'black');    
+    sou_draw_btn(150,y,45,45,"#888888","ADR",'black');  //pas de place pour rajouter l'AU
+    sou_draw_btn(250,y,45,45,"#888888","$0",'black');
+    sou_draw_btn(350,y,45,45,"#888888","RET",'black');
+    sou_draw_btn(450,y,45,45,"#888888",">",'black');
+}
+
+function draw_souris_screen()  // utilise souris_screen pour conserver le numéro de l'écran
+{
+    var screen_nb = souris_1x_screen_nb;
+    if(souris_type == "2x") screen_nb = souris_2x_screen_nb;
+    if(souris_type == "3x") screen_nb = souris_3x_screen_nb;
+    if(souris_type == "4x") screen_nb = souris_4x_screen_nb;
+
+    if(souris_screen >= screen_nb) souris_screen = 0;
+    if(souris_screen < 0) souris_screen = screen_nb - 1;
+
+                              souris_dx = 1 * 400; souris_start = souris_screen; // 1x
+    if(souris_type == "2x") { souris_dx = 2 * 400; souris_start = 2*souris_screen; }
+    if(souris_type == "3x") { souris_dx = 3 * 400; souris_start = 3*souris_screen; }
+    if(souris_type == "4x") { souris_dx = 4 * 400; souris_start = 4*souris_screen; }
+
+    x_courant = souris_dx + 50;
+    if(aff_courant) souris_dx += 100;
+
+    souris_dy = 800;
+    souris_y0 = 0;
+    if(aff_souris_img_and_name) { souris_dy+=100; souris_y0+=100; }
+    if(souris_sel_screen) { souris_dy=850; souris_y0=50; } // 850=5*150+100, 50 pour dessiner le fond correctement }
+    
+    couleur_fond = couleur_fond_sou[souris_screen];
+    couleur_fond2 = couleur_fond2_sou[souris_screen];
+
+    if(grotate==0)
+    {
+        var zx = window.innerWidth / souris_dx;
+        var zy = window.innerHeight / souris_dy;
+        zoom = zx;  // global car re-utilise dans les handlers
+        if(zy < zx) zoom=zy;
+        canvas.width = souris_dx * zoom;
+        //canvas.width = window.innerWidth;   //UU: ok ca fonctionne, utiliser plus tard
+        canvas.height = souris_dy * zoom;
+        context.scale(zoom, zoom);    //TODO: le dimentionnement ne marche pas sur FF et sur la tablette Arnova
+        souris_real_dx = window.innerWidth / zoom;
+    }
+
+    if(grotate)
+    {
+        var zx = window.innerHeight / souris_dx;
+        var zy = window.innerWidth / souris_dy;
+        zoom = zx;
+        if(zy < zx) zoom=zy;
+        canvas.width = souris_dy * zoom;
+        canvas.height = souris_dx * zoom;
+        context.scale(zoom, zoom);    //TODO: le dimentionnement ne marche pas sur FF et sur la tablette Arnova
+        context.textAlign = "center"; // end,right | start,left
+        context.translate(souris_dy,0); context.rotate(1.57);
+    }
+
+    //alert("souris_real_dx = " + souris_real_dx);
+    //alert("window.innerWidth = " + window.innerWidth);
+    //alert("window.innerWidthZ = " + window.innerWidth/zoom);
+
+    context.beginPath();
+    context.rect(0, 0, 1700, souris_y0+700); //!!! x,y,dx,dy
+    context.fillStyle = couleur_fond;
+    context.fill();
+
+    context.beginPath();
+    context.rect(0, souris_y0+700, 1700, 100); //!!! x,y,dx,dy
+    context.fillStyle = couleur_fond2;
+    context.fill();
+
+    // draw_img_in_rect(img3, 200, 50, 380, 90);
+
+    context.textAlign = "center"; // end,right | start,left
+    context.textBaseline = "middle";
+    
+    if(souris_sel_screen) { draw_souris_sel_screen(); return; }
+
+    draw_all_souris(1);
+
+    var y = souris_dy-50;
+    sou_draw_btn( 50,y,45,45,"#888888","<",'black');
+    sou_draw_btn(150,y,45,45,"#888888","AU",'black');
+    sou_draw_btn(250,y,45,45,"#888888","Menu",'black');
+    sou_draw_btn(350,y,45,45,"#888888","TCO",'black');
+    sou_draw_btn(450,y,45,45,"#888888",">",'black');
+
+    context.strokeStyle = couleur_fond2;
+    context.lineWidth = 10;
+    y = souris_y0+700;
+    if(souris_type == "1x") { gline(408,0,408,y); }   // UU: mettre dand draw_one
+    if(souris_type == "2x") { gline(408,0,408,y); gline(808,0,808,y); }
+    if(souris_type == "3x") { gline(408,0,408,y); gline(808,0,808,y); gline(1208,0,1208,y); }
+    if(souris_type == "4x") { gline(408,0,408,y); gline(808,0,808,y); gline(1208,0,1208,y); gline(1608,0,1608,y); }
+    context.lineWidth = 1;
+}
+
+function start_souris()
+{
+
+    tco_remove_listeners();  //si on vient d'un tco
+    sou_add_listeners();
+
+    ecran="SOU";
+
+    draw_souris_screen();
+}
+
+function stop_souris() // for menu
+{
+    sou_remove_listeners();
+    tco_add_listeners();
+
+    ecran="TCO"; tco=-1; welcome_page();
+}
+
+function stop_souris_for_tco()
+{
+    sou_remove_listeners();
+    tco_add_listeners();
+
+    ecran="TCO";
+
+    change_tco(tco_mem);
+}
+
+function change_souris_SUP()
+{
+    souris_screen++;
+    draw_souris_screen();  //gere debordement de screen
+}
+
+function change_souris_INF()
+{
+    souris_screen--;
+    draw_souris_screen();
+}
+
+function sou_draw_txt(x0, y0, dx, dy, ct, cf, txt)
+{
+    context.fillStyle = cf;   grect(x0-dx,y0-dy,x0+dx,y0+dy); context.fill();
+    //context.strokeStyle = cf; grect(x0-dx,y0-dy,x0+dx,y0+dy); context.stroke();
+    context.font = '30pt Courier bold';
+    context.fillStyle = ct;
+    context.fillText(txt, x0, y0);
+}
+
+function sou_draw_btn(x0, y0, dx, dy, c, txt, ct)
+{
+    context.fillStyle = c; context.strokeStyle = "#000000";
+    grect(x0-dx,y0-dy,x0+dx,y0+dy); context.fill(); context.stroke();
+    context.font = '30pt Courier bold';
+    context.fillStyle = ct;
+    context.fillText(txt, x0, y0);
+}
+
+function draw_vit(x0, num)
+{
+    var txt = "$" + aSouris[num].adr;
+    var col = couleur_fond
+    var y = souris_y0 + 50;
+    if(aff_souris_img_and_name) y = souris_y0 + 75;
+
+    if(aSouris[num].um)
+    {
+        if(aSouris[num].um != aSouris[num].adr) txt+=" ["+aSouris[num].um+"]";
+        col=couleur_um[aSouris[num].um_color];
+    }
+    if(aSouris[num].adr==0) txt="ADR?";
+    sou_draw_txt(x0+310, y, 80, 25, 'black', col, txt);
+
+    var txt; if(aSouris[num].sens) txt = "+"; else txt = '-';
+    txt += aSouris[num].vit0_100 + "%";
+    sou_draw_txt(x0+90, y, 75, 25, 'black', couleur_fond, txt);
+}
+
+function draw_adr(x0, num)
+{
+    draw_vit(x0, num);  // dessine adr et vit
+    draw_sens(x0, num); draw_pot(x0, num); // la couleur peut dépendre de l'adresse
+}
+
+function draw_courant()
+{
+    var txt; txt = "I";
+    sou_draw_txt(x_courant, souris_y0+50, 25, 30, 'black', couleur_fond, txt);
+
+    var txt; txt = "" + val_courant + "%";
+    sou_draw_txt(x_courant+10, souris_y0+650, 45, 30, 'black', couleur_fond, txt);
+
+    var h = 500;
+    context.fillStyle = "#cccccc"; context.strokeStyle = "#000000";
+    grect(x_courant-10, souris_y0+100, x_courant+10, souris_y0+100+h); context.fill(); context.stroke();
+
+    var h2 = h * val_courant / 99;   // courant est reporté entre 0 et 99%
+    if(val_courant < 50) context.fillStyle = "#00ff00";  // vert: 0% < I < 50%
+    else if(val_courant < 80) context.fillStyle = "#ffff00"; // jaune: 50% < I < 80%
+    else context.fillStyle = "#ff0000"; // rouge: 80% < I < 99%
+
+    context.strokeStyle = "#000000";
+    grect(x_courant-10, souris_y0+100+h-h2, x_courant+10, souris_y0+100+h); context.fill(); context.stroke();
+}
+
+function draw_pot_params(x0, y0, hg, lg, hb, lb, cf, cg, cb, vmin, vmax, v)
+{
+    context.fillStyle = cf;
+    grect(x0-lb-1, y0-hg/2-hb-1, x0+lb+1, y0+hg/2+hb+1); context.fill();
+    context.fillStyle = cg; context.strokeStyle = "#000000";
+    grect(x0-lg, y0-hg/2, x0+lg, y0+hg/2); context.fill(); context.stroke();
+    y = y0+(hg/2)-(hg*(v-vmin)/(vmax-vmin));
+    if(cb!="")
+    {
+    context.fillStyle = cb; context.strokeStyle = "#000000";
+    grect(x0-lb,y-hb,x0+lb,y+hb); context.fill(); context.stroke();
+    }
+}
+
+function draw_pot(x0, num)
+{
+    var couleur_curseur = "#CC0000";
+    if(aSouris[num].adr == 0) couleur_curseur="#cccccc";
+    if(aSouris[num].adr == 1) couleur_curseur="#ffff00";
+    if(aSouris[num].acc && aSouris[num].acc_inv==0) couleur_curseur="#00FF00";
+    if(aSouris[num].acc && aSouris[num].acc_inv==1) couleur_curseur="#00FF00";
+    if(aSouris[num].um) if(aSouris[num].um != aSouris[num].adr)  couleur_curseur="#cccccc"; // um menee, curseur desactivé
+    draw_pot_params(x0+100, souris_y0+350, 450, 10, 15, 80, couleur_fond, "#CCCCCC", couleur_curseur, 0, 100, aSouris[num].vit0_100)
+}
+
+function draw_sens(x0, num)
+{
+    var c; var t;
+    if(aSouris[num].sens) { c=couleur_plus; t="+"; } else { c=couleur_moins; t="-"; }
+    if(aSouris[num].um && (aSouris[num].um != aSouris[num].adr)) c="#cccccc"; // um menee, bouton desactivé
+    if(aSouris[num].adr==0) c="#cccccc";
+    sou_draw_btn(x0+100,souris_y0+650,80,45,c,t,'black');
+}
+
+function draw_f0(x0, num)
+{
+    var col;
+    if(aSouris[num].f[0]) col="#FFFF00"; else col="#888888";
+    sou_draw_btn(x0+250,souris_y0+150,45,45,col,"F0",'black');
+}
+
+function draw_8f(x0, num)
+{
+    for(var i=0; i<8; i++)
+    {
+        var col="#888888"; var x=x0+250; var y=souris_y0+250;
+        if(aSouris[num].f[aSouris[num].fStart+i]) col="#FFFF00";
+        if(i>=4) x+=100;
+        if(i==1 || i==5) y+=100;
+        if(i==2 || i==6) y+=200;
+        if(i==3 || i==7) y+=300;
+        //if(i==4 || i==9) y+=400;
+        var t = "F" + (aSouris[num].fStart+i);
+        if(aSouris[num].fStart+i > 24) t = "";
+        sou_draw_btn(x,y,45,45,col,t,'black');
+    }
+}
+
+function draw_acc(x0, num)
+{
+    var t=""; var c="#888888";
+    if(window.DeviceOrientationEvent)
+    {
+        if(aSouris[num].acc && aSouris[num].acc_inv==0) { t="Acc"; c="#00FF00"; }
+        if(aSouris[num].acc && aSouris[num].acc_inv==1) { t="-Acc"; c="#FFFF00"; }
+        if(aSouris[num].acc==0) { t="Acc"; c="#888888"; }
+    }
+    sou_draw_btn(x0+350,souris_y0+650,45,45,c,t,'black');
+}
+
+function draw_um(x0, num)
+{
+    var col = "#888888"
+    if(aSouris[num].um) col = couleur_um[ aSouris[num].um_color ];
+    sou_draw_btn(x0+250,souris_y0+650,45,45,col,"UM",'black');
+
+    draw_sens(x0, num); draw_pot(x0, num); // pour changer si besoin sens, vit et les couleurs
+}
+
+function souris_draw_one(x0, num, force)
+{
+    if(ecran!="SOU") return;
+    if(num >= souris_nb) return;
+
+    if(force)
+    {
+        draw_vit(x0, num); draw_adr(x0, num);
+        draw_pot(x0, num); draw_sens(x0, num)
+
+        sou_draw_btn(x0+350,souris_y0+150,45,45,"#888888","F>",'black'); draw_f0(x0, num); draw_8f(x0, num);
+
+        draw_um(x0, num); draw_acc(x0, num);
+
+        if(aff_courant) draw_courant();
+
+        if(aff_souris_img_and_name)
+        {
+            var name = get_name_from_adr(aSouris[num].adr);
+            sou_draw_txt(x0+200, 25, 190, 25, 'black', couleur_fond, name);
+
+            context.beginPath();
+            context.rect(x0+10, 40, 380, 100); //!!! x,y,dx,dy
+            context.fillStyle = couleur_fond;
+            context.fill();
+
+            var pic = get_img_from_adr(aSouris[num].adr)            
+            if(pic==0 && aSouris[num].adr!=0) pic = get_img_from_adr(-2); // image par defaut pour les locos sans image
+            if(pic!=0) draw_img_in_rect(pic, x0+200, 100-10, 380, 100);
+        }
+    }
+    else
+    {
+        if(aSouris[num].vit0_100!=aSouris[num].last_vit) { draw_pot(x0, num); draw_vit(x0, num); aSouris[num].last_vit=aSouris[num].vit0_100; }
+
+        if(aSouris[num].sens!=aSouris[num].last_sens) { draw_sens(x0, num); draw_vit(x0, num); aSouris[num].last_sens=aSouris[num].sens; }
+
+        if(aSouris[num].fct_modif) { draw_f0(x0, num); draw_8f(x0, num); aSouris[num].fct_modif=0; }
+
+        if(aSouris[num].adr_modif) { draw_adr(x0, num); aSouris[num].adr_modif=0; }
+
+        if(aSouris[num].um_modif) { draw_um(x0, num); draw_adr(x0, num); draw_pot(x0, num); aSouris[num].um_modif=0; }
+
+        if(aSouris[num].acc_modif) { draw_acc(x0, num); draw_pot(x0, num); draw_vit(x0, num); aSouris[num].acc_modif=0; }
+    }
+}
+
+function draw_all_souris(force)
+{
+    if(arguments.length==0) force = 0;
+
+    if(ecran!="SOU") return;
+
+    if(souris_type == "1x")   souris_draw_one(0, souris_start, force);
+    if(souris_type == "2x") { souris_draw_one(0, souris_start, force); souris_draw_one(400, souris_start+1, force); }
+    if(souris_type == "3x") { souris_draw_one(0, souris_start, force); souris_draw_one(400, souris_start+1, force); souris_draw_one(800, souris_start+2, force); }
+    if(souris_type == "4x") { souris_draw_one(0, souris_start, force); souris_draw_one(400, souris_start+1, force); souris_draw_one(800, souris_start+2, force); souris_draw_one(1200, souris_start+3, force); }
+
+    //AU & courant updated by timer
+}
+
+
+//  Handle
+
+var was_mouse_down = 0;
+var sou_x_mouse_down = 0;
+var sou_y_mouse_down = 0;
+var sou_x_mouse_click = 0;
+var sou_y_mouse_click = 0;
+function sou_is_click_in(xc, yc, dx, dy)
+{
+    yc += souris_y0;
+
+    if(was_mouse_down == 1) // verifie le click down aussi pour eviter qu'un appuie sur pot et relachement sur bouton declenche le bouton
+    {
+        if(sou_x_mouse_down < (xc-dx)) return 0;
+        if(sou_x_mouse_down > (xc+dx)) return 0;
+        if(sou_y_mouse_down < (yc-dy)) return 0;
+        if(sou_y_mouse_down > (yc+dy)) return 0;
+    }
+
+    if(sou_x_mouse_click < (xc-dx)) return 0;
+    if(sou_x_mouse_click > (xc+dx)) return 0;
+    if(sou_y_mouse_click < (yc-dy)) return 0;
+    if(sou_y_mouse_click > (yc+dy)) return 0;
+
+    return 1;
+}
+
+function is_xy_in(x, y, xc, yc, dx, dy)
+{
+   if(x < (xc-dx)) return 0;
+   if(x > (xc+dx)) return 0;
+   if(y < (yc-dy)) return 0;
+   if(y > (yc+dy)) return 0;
+   return 1;
+}
+
+function x_to_souris(x)
+{
+    sou_num = -1;
+    if(souris_type == "1x")
+    {
+        if(x>=0 && x<400) sou_num = souris_start;
+    }
+
+    if(souris_type == "2x")
+    {
+        if(x>=0 && x<400) sou_num = souris_start;
+        if(x>=400 && x<800) sou_num = souris_start+1;
+    }
+
+    if(souris_type == "3x")
+    {
+        if(x>=0 && x<400) sou_num = souris_start;
+        if(x>=400 && x<800) sou_num = souris_start+1;
+        if(x>=800 && x<1200) sou_num = souris_start+2;
+    }
+
+    if(souris_type == "4x")
+    {
+        if(x>=0 && x<400) sou_num = souris_start;
+        if(x>=400 && x<800) sou_num = souris_start+1;
+        if(x>=800 && x<1200) sou_num = souris_start+2;
+        if(x>=1200 && x<1600) sou_num = souris_start+3;
+    }
+
+    if(sou_num >= souris_nb) sou_num=-1;
+    return sou_num;
+}
+
+function souris_to_x0(s)
+{
+    if(souris_type == "1x") return 0;
+    if(souris_type == "2x") return 400*(s%2);
+    if(souris_type == "3x") return 400*(s%3);
+    if(souris_type == "4x") return 400*(s%4);
+}
+
+function doProg()
+{
+    if(confirm("Voulez vous vraiment passer en mode de programmation ?"))
+    {
+        var prog_code = parseInt(prompt("Code de programmation ?", "1234"),10);
+
+        var valeur = prompt("CV ? (1-1023)", "1");
+        var cv = parseInt(valeur,10);
+        if(cv>=1 && cv<=1023)
+        {
+            valeur = prompt("Donnee ? (0-255)", "3");
+            var dat = parseInt(valeur,10);
+            if(dat>=0 && dat<=255)
+            {
+                //cva<1-1024> cvd<0-255> cvp<XXXX> =
+                if(confirm("Voulez vous programmer ?\nCV=" + cv + " DAT=" + dat))
+                    cmd_prog = "cva" + cv + "cvd" + dat + "cvp" + prog_code;
+            }
+        }
+    }
+}
+
+function get_um_color()
+{
+    for(var i=0; i<4; i++)
+    {
+        if(couleur_um_used[i]==0)
+        {
+            couleur_um_used[i] = 1;
+            return i;
+        }
+    }
+    return -1;
+}
+
+function um_pressed(x0, num)
+{
+    if(aSouris[num].um == 0)
+    {
+        if(last_used_souris == -1) { alert("pas de menante selectionnee"); return; }
+        if(last_used_souris == num) { alert("pas de menante selectionnee"); return; }  // on ne s'attache pas a nous même
+        if(aSouris[last_used_souris].adr<2) { alert("adresse de menante 0 ou 1 non valide"); return; }
+        if(aSouris[num].adr<2) { alert("adresse de menee 0 ou 1 non valide, doit être >= 2"); return; }
+
+        if(aSouris[last_used_souris].um == 0)   // la menante n'etait pas en um
+        {
+            var color = get_um_color();
+            if(color == -1) return;
+            aSouris[last_used_souris].um = aSouris[last_used_souris].adr;
+            aSouris[num].um = aSouris[last_used_souris].adr;
+            if(aSouris[last_used_souris].sens != aSouris[num].sens) aSouris[num].um = -aSouris[num].um;
+            aSouris[last_used_souris].um_color = color;
+            aSouris[num].um_color = color;
+        }
+
+        else   // la menante (ou pas) etait deja en um
+        {
+            aSouris[num].um = Math.abs(aSouris[last_used_souris].um);
+            // trouver la vraie menante (last est peut être déja une menée)
+            var menante;
+            for(var i=0; i<souris_nb; i++) if(aSouris[i].adr == aSouris[num].um) menante=i;
+            if(aSouris[menante].sens != aSouris[num].sens) aSouris[num].um = -aSouris[num].um;
+            aSouris[num].um_color = aSouris[menante].um_color;
+        }
+    }
+    else
+    {
+        var is_menante=0;
+        if(aSouris[num].adr == aSouris[num].um) is_menante=1;
+        var list_num = [];
+        for(var i=0; i<souris_nb; i++) if(Math.abs(aSouris[num].um) == Math.abs(aSouris[i].um)) list_num.push(i);
+
+        if(list_num.length <= 2) // on detruit les 2
+        {
+            for(var i=0; i<list_num.length; i++) aSouris[list_num[i]].um = 0;
+            couleur_um_used[aSouris[list_num[0]].um_color]=0;
+        }
+
+        if((list_num.length > 2) && is_menante) // on detruit tout
+        {
+            for(var i=0; i<list_num.length; i++) aSouris[list_num[i]].um = 0;
+            couleur_um_used[aSouris[list_num[0]].um_color]=0;
+        }
+
+        if((list_num.length > 2) && (is_menante==0)) // on detache juste notre loco
+        {
+            aSouris[num].um = 0;
+        }
+    }
+
+    aSouris[num].um_modif = 1;
+    aSouris[last_used_souris].um_modif = 1;
+    um_update(last_used_souris);
+}
+
+function um_update(num) // update toutes les menées de la menante
+{
+    // verif que num est menante
+    if(aSouris[num].adr < 2) return;
+    if(aSouris[num].um != aSouris[num].adr) return;
+
+    // update des menées
+    for(var l=0; l<souris_nb; l++)
+    {
+        if(aSouris[l].adr)
+        if((l!=num) && Math.abs(aSouris[l].um) == aSouris[num].um)
+        {
+            aSouris[l].vit0_100 = aSouris[num].vit0_100;
+            aSouris[l].sens = aSouris[num].sens;
+            if(aSouris[l].um < 0) aSouris[l].sens^=1;
+        }
+    }
+}
+
+function doChangeAdr(num, adr)
+{
+    aSouris[num].adr = adr;
+    aSouris[num].adr_modif = 1;
+
+    // on part d'une souris clean et on envoie les commandes pour que la loco corresponde à la souris
+    aSouris[num].fStart=1;
+    for(var i=0; i<25; i++) aSouris[num].f[i]=0;
+    aSouris[num].fct_modif = 1;
+
+    aSouris[num].vit0_100=0;
+    aSouris[num].sens=1;
+
+    aSouris[num].old_cmd="";
+    aSouris[num].old_cmd_f="";
+
+    aSouris[num].acc=0;
+    aSouris[num].acc_modif=1;
+}
+
+function doDialogChangeAdr(num)
+{    
+    if(aSouris[num].um)
+    {
+        alert("Interdiction de modifier l'adresse d'une UM active");
+    }
+    else
+    {
+        var valeur = prompt("Adresse de la Loco ? (1-9999)\n(ou 0 pour desactiver la souris)\n(1 pour choisir la loco analogique)");
+        var new_adr = parseInt(valeur,10);
+        if((new_adr >= 0) && (new_adr <= 9999))
+        {
+            if(new_adr!=0) for(var i=0; i<souris_nb; i++) if(new_adr==aSouris[i].adr) { alert("\"" + (valeur) + "\" est une adresse deja utilisee"); return; }
+            
+            doChangeAdr(num, new_adr);
+        }
+        else alert("\"" + (valeur) + "\" est une adresse invalide");
+    }
+}
+
+function doImgChangeAdr(num)
+{
+    if(aSouris[num].um)
+    {
+        alert("Interdiction de modifier l'adresse d'une UM active");
+    }
+    else
+    {
+        souris_sel_screen=1; draw_souris_screen(); return;
+    }
+}
+
+function souris_sel_screen_click(x, y)
+{
+    // ecran de selection des locos avec les images
+    var adr=souris_sel_get_adr(x, y);
+    if(adr>=0)
+    {
+        var ok=1;
+        for(var i=0; i<souris_nb; i++) if(adr==aSouris[i].adr) { alert("\"" + adr + "\" est une adresse deja utilisee"); ok=0; }
+        if(ok) doChangeAdr(used_souris, adr) 
+        um_update(used_souris);
+        souris_sel_screen=0; draw_souris_screen();
+    }        
+    
+    if(y>750 && y<850)
+    {
+        if(x>0 && x<100) // <
+        { 
+            souris_sel_start_ind-=souris_sel_start_inc; 
+            //if(souris_sel_start_ind<0) souris_sel_start_ind=0;
+            if(souris_sel_start_ind<0) 
+            { 
+                souris_sel_start_ind = 0; 
+                while(1) 
+                {
+                    souris_sel_start_ind+=souris_sel_start_inc;
+                    if(souris_sel_start_ind>=nb_img_or_name_loco_nb)
+                    {
+                        souris_sel_start_ind-=souris_sel_start_inc; 
+                        break; 
+                    }
+                }
+            }                
+            draw_souris_screen(); 
+        }
+        
+        if(x>100 && x<200) // ADR
+        {          
+            doDialogChangeAdr(used_souris, adr);                
+            um_update(used_souris);
+            souris_sel_screen=0; draw_souris_screen(); 
+        }            
+        
+        if(x>200 && x<300) // $0
+        { 
+            doChangeAdr(used_souris, 0) 
+            um_update(used_souris);
+            souris_sel_screen=0; draw_souris_screen();
+        }            
+        
+        if(x>300 && x<400) // RET
+        { 
+            souris_sel_screen=0; draw_souris_screen();
+        } 
+        
+        if(x>400 && x<500) // >
+        {
+            souris_sel_start_ind+=souris_sel_start_inc;
+            //if(souris_sel_start_ind>nb_img_or_name_loco_nb) souris_sel_start_ind-=souris_sel_start_inc;
+            if(souris_sel_start_ind>nb_img_or_name_loco_nb) souris_sel_start_ind=0;
+            draw_souris_screen(); 
+        } 
+    }
+}
+
+function souris_drive_screen_click(x, y)
+{
+    // ecran de conduite des locos
+    y -= souris_y0;
+
+    // boutons généraux
+
+    if(sou_is_click_in( 50, 750, 45, 45)) change_souris_INF(); // SOURIS PRECEDENTE
+    if(sou_is_click_in(150, 750, 45, 45)) au_pressed = 1; // AU
+    if(sou_is_click_in(250, 750, 45, 45)) stop_souris(); // MENU
+    if(sou_is_click_in(350, 750, 45, 45)) stop_souris_for_tco(); // DERNIER TCO
+    if(sou_is_click_in(450, 750, 45, 45)) change_souris_SUP(); // SOURIS SUIVANTE
+
+
+    // boutons de chaque souris
+
+    var num = x_to_souris(x);
+    if(num==-1) return;
+    var x0 = souris_to_x0(num);
+
+    if(num != used_souris) last_used_souris = used_souris; // on conserve la souris d'avant (pour um)
+    used_souris = num;
+
+    if(sou_is_click_in(x0+100,650,80,45)) // INV
+    {
+        if((aSouris[num].um==0) || (aSouris[num].um==aSouris[num].adr)) aSouris[num].sens^=1;  // que pour les non um et menante (pas pour les menées)
+    }
+
+    if(sou_is_click_in(x0+250, 150, 45, 45))  // F0
+    {
+        aSouris[num].f[0]^=1;
+        aSouris[num].fct_modif = 1;
+    }
+
+    if(sou_is_click_in(x0+350, 150, 45, 45))  // F>
+    {
+        aSouris[num].fStart+=8;
+        if(aSouris[num].fStart>=25) aSouris[num].fStart=1;
+        aSouris[num].fct_modif = 1;
+    }
+
+    function fn(n)
+    {
+        aSouris[num].f[ aSouris[num].fStart+n ] ^=1;
+        aSouris[num].fct_modif = 1;
+    }
+
+    if(sou_is_click_in(x0+250, 250, 45, 45)) fn(0); // F1-10,11-20,21-24 gauche / doite
+    if(sou_is_click_in(x0+250, 350, 45, 45)) fn(1);
+    if(sou_is_click_in(x0+250, 450, 45, 45)) fn(2);
+    if(sou_is_click_in(x0+250, 550, 45, 45)) fn(3);
+    if(sou_is_click_in(x0+350, 250, 45, 45)) fn(4);
+    if(sou_is_click_in(x0+350, 350, 45, 45)) fn(5);
+    if(sou_is_click_in(x0+350, 450, 45, 45)) fn(6);
+    if(sou_is_click_in(x0+350, 550, 45, 45)) fn(7);
+
+    if(sou_is_click_in(x0+310, 50, 45, 45))  // ADR
+    {
+        doDialogChangeAdr(num);
+        souris_draw_one(x0, num, 1);  //UU essayer d'enlever
+    }
+    else if(aff_souris_img_and_name)
+    {
+        var dy=90; var yy=0;
+        if(sou_is_click_in(x0+200, yy, 190, dy))
+        {
+            doImgChangeAdr(num)
+            return;
+        }
+    }
+
+    if(sou_is_click_in(x0+250,650,45,45)) // UM
+    {
+        um_pressed(x0, num);
+        aSouris[num].um_modif = 1;
+    }
+
+    if(sou_is_click_in(x0+350, 650, 45, 45))  // ACC
+    {
+        if(window.DeviceOrientationEvent)
+        {
+            if(aSouris[num].acc==0)
+            {
+                aSouris[num].acc=1;
+                aSouris[num].acc_inv=0;
+            }
+            else
+            {
+                if(aSouris[num].acc_inv==0) aSouris[num].acc_inv=1;
+                else { aSouris[num].acc=0; aSouris[num].acc_inv=0; }
+            }
+            aSouris[num].acc_modif = 1;
+
+            var new_acc_listen = 0;
+            for(var i =  0; i<souris_nb; i++) if(aSouris[i].acc) new_acc_listen = 1;
+
+            if(acc_listen==0 &&  new_acc_listen==1)
+            {
+                window.addEventListener("devicemotion", handleMotion);
+                window.addEventListener("deviceorientation", handleOrientation);
+                acc_listen = 1;
+            }
+            else if(acc_listen==1 && new_acc_listen==0)
+            {
+                window.removeEventListener("devicemotion", handleMotion);
+                window.removeEventListener("deviceorientation", handleOrientation);
+                acc_listen = 0;
+            }
+        }
+    }
+
+    um_update(num);   // si menante, peut être modifier les menées (en sens)
+
+    draw_all_souris();
+}
+
+function sou_ze_mouse_click(x, y)
+{
+    if(souris_sel_screen) souris_sel_screen_click(x, y);
+    
+    else souris_drive_screen_click(x, y);
+}
+
+function sou_ze_mouse_move(x, y)
+{
+    if(souris_sel_screen) return;
+
+    y -= souris_y0;
+
+    var num = x_to_souris(x);
+    if(num==-1) return;
+    
+    if(num != used_souris) last_used_souris = used_souris; // on conserve la souris d'avant (pour um)
+    used_souris = num;    
+
+    var x0 = souris_to_x0(num);
+    if(!is_xy_in(x-x0, y, 100, 350, 80, 250)) return;
+
+    if(aSouris[num].um && (aSouris[num].um!=aSouris[num].adr)) return;  // pas pour les menées
+
+    var vit = (550 - y); // 0-400
+    vit = 100 / 400 * vit;
+    if(vit < 0) vit = 0;
+    if(vit > 100) vit = 100;
+    vit = parseInt(vit);
+
+    aSouris[num].vit0_100=vit;
+
+    um_update(num);   // si menante, peut être modifier les menées (en vit)
+
+    draw_all_souris();
+}
+
+
+function handleMotion(event) {}
+
+var acc_new_sens=1;
+function handleOrientation(event)
+{
+    // event.alpha event.beta event.gamma
+    // apha=bousolle=lacet, beta=tanguage:haut/bas, gamma=roulis
+    // sou_draw_txt(100, 100, 80, 25, 'black', couleur_fond, "A" + parseInt(event.alpha) + " B" + parseInt(event.beta) + " G" + parseInt(event.gamma));
+    // beta +90: telephone vers le haut, 0 a plat, -90 vers le bas
+    var vit=0;
+    if(grotate==0) val = event.beta; else val = -event.gamma;
+    if(val==null) return;
+
+    var min=acc_min; var max=acc_max;  //10,50 > 10,40 > 5,30
+    if(val<min && val>-min) vit=0;
+    if(val>max) { vit=100; acc_new_sens=1; }
+    if(val>min && val<max) { vit=parseInt(100*(val-min)/(max-min)); acc_new_sens=1; }
+    if(val>-min && val<min) vit=0;
+    if(val>-max && val<-min) { vit=parseInt(100*(-val-min)/(max-min)); acc_new_sens=0; }
+    if(val<-max){ vit=100; acc_new_sens=0; }
+
+    if(acc_au) if(val>acc_au || val<-acc_au) au_req=1;
+
+    // update de toutes les souris qui sont sur acc
+    for(var num=0; num<souris_nb; num++)
+    {
+        if(aSouris[num].acc)
+        {
+            if((aSouris[num].um==0) || (aSouris[num].um==aSouris[num].adr)) // seulement les menantes en cas d'um
+            {
+                aSouris[num].vit0_100 = vit;
+                aSouris[num].sens = acc_new_sens ^ aSouris[num].acc_inv;
+            }
+
+            um_update(num);  // la menante peut etre sur acc
+        }
+    }
+
+    if(ecran=="SOU") draw_all_souris(); // acc fonctionne même en dehors de l'écran des souris
+}
+
+function handleTouch(evt)   //touchstar & touchmove
+{
+    if(evt.type == "touchmove") console.log('touchmove');
+    if(evt.type == "touchdown") console.log('touchdown');
+
+    if(evt.type == "touchmove") evt.preventDefault();
+    // prevent en touchmove pour ne pas generer d'evenements souris (et sans cela le click souris ne marche pas)
+    // pas de prevent sur touchstart/end pour generer un click souris
+    // si besoin d'identifier le doigt touches[i].identifier
+    var touches = evt.changedTouches;
+    for (var i=0; i<touches.length; i++)
+    {
+        if(grotate==0)
+        {
+            sou_ze_mouse_move(touches[i].pageX / zoom, touches[i].pageY / zoom);
+        }
+        else
+        {
+            sou_ze_mouse_move(touches[i].pageY / zoom, souris_dy - touches[i].pageX / zoom);
+        }
+    }
+
+    //evt.preventDefault();//
+}
+
+function handleMouseDM(evt)  // down & move
+{
+    if(evt.type == "mousemove") console.log('mousemove');
+    if(evt.type == "mousedown") console.log('mousedown');
+
+    var rect = canvas.getBoundingClientRect();
+    var mousePos = sou_getMousePos(canvas, evt);
+    if(evt.buttons)
+    {
+        if(grotate==0)
+        {
+            sou_ze_mouse_move(mousePos.x / zoom, mousePos.y / zoom);
+        }
+        else
+        {
+            sou_ze_mouse_move(mousePos.y / zoom, souris_dy - mousePos.x / zoom);
+        }
+    }
+
+    if(evt.type == "mousedown")
+    {
+        was_mouse_down = 1;
+        sou_x_mouse_down = mousePos.x / zoom;
+        sou_y_mouse_down = mousePos.y / zoom;
+        if(grotate)
+        {
+            sou_x_mouse_down = mousePos.y / zoom;
+            sou_y_mouse_down = souris_dy - mousePos.x / zoom;
+        }
+    }
+
+    event.preventDefault();//
+}
+
+function sou_getMousePos(canvas, evt)   //UU: voir si on peut supprimer cette fct
+{
+    var rect = canvas.getBoundingClientRect();
+    return { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
+}
+
+function handleClick(event)
+{
+    //alert('Mouse clicked !');
+    console.log('click');
+    var rect = canvas.getBoundingClientRect();
+    var mousePos = sou_getMousePos(canvas, event);
+    sou_x_mouse_click = mousePos.x / zoom;
+    sou_y_mouse_click = mousePos.y / zoom;
+    if(grotate)
+    {
+        sou_x_mouse_click = mousePos.y / zoom;
+        sou_y_mouse_click = souris_dy - mousePos.x / zoom;
+    }
+    //alert("x="+sou_x_mouse_click+" y="+sou_y_mouse_click);
+    sou_ze_mouse_move(sou_x_mouse_click, sou_y_mouse_click);
+    sou_ze_mouse_click(sou_x_mouse_click, sou_y_mouse_click);
+    was_mouse_down = 0;
+
+    event.preventDefault();//
+}
+
+function handleDblClick(event)
+{
+    console.log('dblclick');
+    event.preventDefault(); // pour ne pas redimensionner la page
+}
+
+var add_touch_ok=0;
+function sou_add_listeners()
+{
+    canvas.addEventListener('click', handleClick, false);
+    canvas.addEventListener('dblclick', handleDblClick, false);
+
+    canvas.addEventListener('mousemove', handleMouseDM, false);
+    canvas.addEventListener('mousedown', handleMouseDM, false);
+
+    canvas.addEventListener('touchmove', handleTouch, false);
+    canvas.addEventListener('touchstart', handleTouch, false);
+}
+
+function sou_remove_listeners()
+{
+    canvas.removeEventListener('click', handleClick);
+    canvas.removeEventListener('dblclick', handleDblClick);
+    canvas.removeEventListener('mousemove', handleMouseDM);
+    canvas.removeEventListener('mousedown', handleMouseDM);
+    canvas.removeEventListener('touchmove', handleTouch);
+    canvas.removeEventListener('touchstart', handleTouch);
+    //window.removeEventListener("deviceorientation", handleOrientation); // on les garde (pr l'instant) afin de pouvoir utiliser accc en dehors de la fenetre
+    //window.removeEventListener("devicemotion", handleMotion);
+}
+
+//  Loop CMD
+
+function build_cmd_sou(num)
+{
+    var cmd_sou = "a";   // on n'utilise plus b,c,d
+
+    cmd_sou += aSouris[num].adr;
+
+    if(aSouris[num].sens) cmd_sou += "s+"; else cmd_sou += "s-";
+
+    cmd_sou += "v" + aSouris[num].vit0_100;
+
+    var cmd_f = "f0"
+    for (var i=0; i<=24; i++)
+    {
+        if(aSouris[num].f[i]) cmd_f += "+"; else cmd_f += "-";
+    }
+    if(cmd_f != aSouris[num].old_cmd_f)
+    {
+        cmd_sou += cmd_f;
+        aSouris[num].old_cmd_f = cmd_f;
+    }
+
+    return cmd_sou;
+}
+
+var old_au_red=-1; // pour ne pas redessiner pour rien
+var cpt_sou = 0;
+function draw_au()
+{
+    // clignotement du bouton AU
+    cpt_sou++;
+    var au_red = 0;
+    if(au && (cpt_sou&2)) au_red = 1;
+    if(conn_ok==0) au_red=0;   // comment to debug
+    if(old_au_red != au_red)
+    {
+        var col;
+        if(au_red) col = "#FF0000"; else col = "#888888";
+        sou_draw_btn(150,souris_y0+750,45,45,col,"AU",'black');
+        old_au_red = au_red;
+    }
+}
+
+function sou_handleTimer()
+{
+    // clearInterval(timer); //on annule jamais le timer
+    if(ecran=="SOU") if(souris_sel_screen==0) draw_au();
+
+    //val_courant++; if(val_courant==100) val_courant=0; // debug
+    if(ecran=="SOU") if(aff_courant) if(val_courant!=val_old_courant) { draw_courant(); val_old_courant=val_courant; }
+
+    // build de la commande a envoyer
+    var cmd = ""
+    if(au_req)
+    {
+        au_req=0;
+        cmd += "au1"
+    }
+    if(au_pressed)
+    {
+        au_pressed = 0;
+        cmd += "au" + (au^1);
+        //if(conn_ok==0) au ^= 1;  //debug
+    }
+
+    function add_cmd_sou(num)
+    {
+        if(num>=souris_nb) return;
+        if(aSouris[num].adr == 0) return;
+        cmd += build_cmd_sou(num);
+    }
+
+    for(var i = 0; i < souris_nb; i++) add_cmd_sou(i);  // pour toutes les souris, même les cachées s'il y a l'acc
+
+    if(cmd_prog != "")
+    {
+        cmd += cmd_prog;
+        cmd_prog = "";
+    }
+
+    // envoie de la commande
+    if(conn_ok)
+    {
+        cmd_tx += cmd;
+    }
+}
+
+
+
+
+
+
+//========================================
+// Partie "PROCESS RX"
+//========================================
+
+// note: pour plus tard, penser a enlever le message de bienvenu
+
+function fillNewVar(str, irx, nb, ivar)
+{
+    for(var i=0; i<(nb/4); i++)
+    {
+        var n = parseInt(str[irx], 16);
+        new_var[ivar] = n&1; n=n>>1; ivar+=1;
+        new_var[ivar] = n&1; n=n>>1; ivar+=1;
+        new_var[ivar] = n&1; n=n>>1; ivar+=1;
+        new_var[ivar] = n&1;         ivar+=1;
+        irx+=1;
+    }
+
+}
+
+function process_rx(str)   //U: voir si en mode souris on le fait quand meme (pour AU, il faut le faire ds tous les cas)
+{
+    // 0                 1         2         3         4         5         6         7         8         9         10        11        12
+    // 01 2   3456    7890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567
+    // au[0/1] ana/dcc iXXXXXXXXXXXXXXXXXXXXXXXX dXXXXXXXXXXXX eXXXXXXXXXXXX uXXXXXXXXXXXXXXXXXXXXXXXX cYY..vXXXXXXXXXXXXXXXXXXXXXXXX++
+
+    for(var i=0; i<nbVar; i+=1) old_var[i]=new_var[i];  //possibilite de ggner en changeant de bank
+
+    console.log("rx="+str.length+" str="+str);
+    if(str.length < 118) { console.log("low rx="+str.length+" str="+str); return; }
+    if(str[0] != 'a') return;
+    if(str[8] != 'i') return;
+    if(str[34] != 'd') return;
+    if(str[48] != 'e') return;
+    if(str[62] != 'u') return;
+    if(str[88] != 'c') return;
+    if(str[93] != 'v') return;
+    console.log("rx valide");
+
+    fillNewVar(str,  9, 96, I);
+    fillNewVar(str, 35, 48, D);
+    fillNewVar(str, 49, 48, E);
+    fillNewVar(str, 63, 96, U);
+    fillNewVar(str, 94, 96, U+96);
+
+    val_courant = 10 * parseInt(str[89]) + parseInt(str[90]);
+
+    if(str.search("au0") != -1) au = 0;  //possibilite de mettre au dans les vars
+    if(str.search("au1") != -1) au = 1;
+    new_var[AU] = au;
+
+    if(str.search("ana") != -1) mode_ana = 1; else mode_ana = 0;  //possibilite de mettre au dans les vars
+    if(str.search("dcc") != -1) mode_dcc = 1; else mode_dcc = 0;
+
+    //rec_in();
+    if(ecran=="TCO") notify_update();
+}
+
+
+
+
+
+
+//========================================
+// Partie "WEBSOCKETS"
+//========================================
+
+var ws_supported = 0;
+var conn_ok=0;
+var connection = 0;
+var ws_aff_close_msg = 1;
+
+function connect_ws()
+{
+    try
+    {
+        conn_ok=0;
+        // utiliser une des 2 lignes suivantes selon
+        // - le script est chargé depuis D17 et controle D17
+        connection = new WebSocket('ws://' + location.hostname + ':81/', ['arduino']);
+        // - le script n'est pas chargé depuis D17 mais controle D17  
+        //connection = new WebSocket('ws://192.168.4.1:81/', ['arduino']);
+        
+        //alert("server ip = " + location.hostname);
+        ws_supported = 1;
+    }
+    catch(e)
+    {
+        alert("websocket error !!!\n\nCan be:\n- broswer does not support them\n- bad server URL\n- server cannot handle more connections");
+    }
+
+    if(ws_supported)
+    {
+
+        connection.onopen = function ()
+        {
+            //alert("onOpen");
+            console.log('WebSocket Open');
+            //connection.send('Connect ' + new Date());
+            connection.send("souris_d17_net v1");
+            conn_ok=1;
+            if(ecran == "TCO" && tco==-1) welcome_page();
+        };
+
+        connection.onerror = function (error)
+        {
+            if(conn_ok) alert("onError");
+            console.log('WebSocket Error ', error);
+        };
+
+        connection.onmessage = function (e)
+        {
+            //alert("onMsg" + e.data);
+            console.log('Server: ', e.data);
+            process_rx(e.data);
+        };
+
+        connection.onclose = function ()
+        {
+            if(ws_aff_close_msg == 0) alert("onClose");
+            console.log('WebSocket connection closed');
+            conn_ok=0;
+            if(ecran == "TCO" && tco==-1) welcome_page();
+        };
+
+    } // ws_supported
+}
+
+if(connect_at_start) connect_ws();
+
+function disconnect_ws()
+{
+    ws_dis_close_msg = 0; // pour ne pas afficher le message de fermeture dans le cas ou c'est voulu
+    if(conn_ok) connection.close();
+    conn_ok=0;
+    ws_dis_close_msg = 1;
+}
+
+function tx_ws(str)
+{
+    if(ws_supported==0) return;
+    if(conn_ok==0) return;
+    connection.send(str);
+}
+
+
+
+
+
+
+//========================================
+// Partie "RECORDER"
+//========================================
+
+//class TimeCmd
+function TimeCmd(_time, _cmd)
+{
+    this.time = _time;
+    this.cmd  = _cmd;
+}
+var a_rec_cmd = [];
+function TimeIn(_time, _i, _time_inv)
+{
+    this.time = _time;
+    this.i    = _i;
+    this.time_inv = _time_inv; // temps a partir duquel on verifie l'entree (0 = tout le temps). utilise lors d'une inversion
+}
+var a_rec_i   = [];
+
+var rec=0; var cpt0=0;
+
+// definir le nb de in, aig et u a enregistrer
+var rec_nb_in  = 13;   var rec_state_in = [];   for(var i=0; i<rec_nb_in ; i++) rec_state_in.push(0);
+var rec_nb_aig = 10;   var rec_save_aig = [];   for(var i=0; i<rec_nb_aig; i++) rec_save_aig.push(0);
+var rec_nb_u   = 12;   var rec_save_u   = [];   for(var i=0; i<rec_nb_u  ; i++) rec_save_u.push(0);
+
+var rec_old_s = "";
+var rec_tinv = 0;
+function rec_cmd(cmd)
+{
+    if(cmd=="") return;
+    if(rec)
+    {
+        a_rec_cmd.push(new TimeCmd(cpt - cpt0, cmd));
+        //welcome_msg = "cmd_nb="+a_rec_cmd.length+" in_nb="+a_rec_i.length; welcome_msg_dcpt = 20;
+
+        // detection ordre inversion dans la commande
+        var new_s = "";
+        if(cmd.search("s+") != -1) new_s="s+";
+        if(cmd.search("s-") != -1) new_s="s-";
+        if(new_s!=rec_old_s)
+        {
+            rec_old_s = new_s;
+            rec_tinv = cpt - cpt0;
+            welcome_msg = "t="+rec_tinv+" INV detected"; welcome_msg_dcpt = 20;
+        }
+    }
+}
+
+var rec_in_nb_off = 20;  //5s
+var rec_in_nb_on  = 6;  //1.5s
+var rec_last_i = -1; var rec_last_last_i = -1;
+function rec_in()
+{
+    for(var i=0; i<rec_nb_in; i++)
+    {
+        if(new_var[I + i]==0)
+        {
+            if(rec_state_in[i]<rec_in_nb_off) rec_state_in[i]++;
+        }
+        else
+        {
+            if(rec_state_in[i]<rec_in_nb_off) rec_state_in[i]=0;
+            else
+            {
+                rec_state_in[i]++;
+                if(rec_state_in[i]==(rec_in_nb_off+rec_in_nb_on))  //nb off puis nb on atteint
+                {
+                    if(rec)
+                    {
+                        if(a_rec_i.length==0) rec_tinv=0; // pas d'enregistrement d'inv sur le premier (car risque de blocage)
+
+                        if(rec_tinv) rec_last_last_i = rec_last_i = -1;  // reset des anciens capteurs si inv
+
+                        if(i!=rec_last_i && i!=rec_last_last_i)  // on enregistre seulement si capteurs bien differents (sauf en cas d'inv)
+                        {
+                            if(rec_tinv >= (cpt - cpt0 - rec_in_nb_on - 2)) rec_tinv = 0;
+                            a_rec_i.push(new TimeIn(cpt - cpt0 - rec_in_nb_on - 2, i, rec_tinv));
+
+                            rec_last_last_i = rec_last_i;
+                            rec_last_i = i;
+                        }
+                        rec_tinv=0;
+                    }
+                    rec_state_in[i]=0;
+                    welcome_msg ="t="+(cpt-cpt0)+" DET_IN="+i; welcome_msg_dcpt = 20;
+                }
+            }
+        }
+    }
+}
+
+function start_rec()
+{
+    // vider l'enregistrement precedent
+    while(a_rec_cmd.length) a_rec_cmd.pop();
+    while(a_rec_i.length) a_rec_i.pop();
+
+    // sauvegarde aigs et u
+    for(var i=0; i<rec_nb_aig; i++) rec_save_aig[i]=new_var[E + i];
+    for(var i=0; i<rec_nb_u  ; i++) rec_save_u[i]  =new_var[U + i];
+
+    // reset detection de changement de sens
+    rec_old_s = "";
+    rec_tinv = 0;
+
+    // date de depart
+    cpt0=cpt;
+
+    // go
+    rec=1;
+}
+
+function stop_rec()
+{
+    rec=0;
+    var t="";
+
+    // cmd et i non melanges
+    //for(var i=0; i<a_rec_cmd.length; i++) t+="cpt="+a_rec_cmd[i].time+" cmd="+a_rec_cmd[i].cmd+"\n";
+    //for(var i=0; i<a_rec_i.length; i++) t+="cpt="+a_rec_i[i].time+" i="+a_rec_i[i].i+"\n";
+
+
+    // cmd et i melanges
+    var ind_c=0; var ind_i=0;
+    var tc=0; var ti=0;
+    while(1)
+    {
+        if(a_rec_i.length==ind_i) ti=1000000; else ti = a_rec_i[ind_i].time;
+        if(a_rec_cmd.length==ind_c) break; tc = a_rec_cmd[ind_c].time;
+
+        while(tc<ti)
+        {
+            t+="cpt="+a_rec_cmd[ind_c].time+" cmd="+a_rec_cmd[ind_c].cmd+"\n";
+            ind_c++;
+            if(a_rec_cmd.length==ind_c) break;
+            tc = a_rec_cmd[ind_c].time;
+        }
+        if(ind_i<a_rec_i.length) { t+="\ncpt="+a_rec_i[ind_i].time+" i="+a_rec_i[ind_i].i+" (tinv="+a_rec_i[ind_i].time_inv+")\n"; ind_i++; }
+    }
+
+    //alert(t);
+    copyToClipboard2(t);
+}
+
+//---------------------------------------------
+
+var play=0;
+var rec_ind_cmd=0;
+var rec_ind_i=0;
+var trec=0;
+
+function start_play()
+{
+    // mise en place des aiguillages et u
+    var cmd="";
+    for(var i=0; i<rec_nb_aig; i++) { cmd+="t"+i; if(rec_save_aig[i]) cmd+='/'; else cmd+='-'; }
+    for(var i=0; i<rec_nb_u  ; i++) { cmd+="u"+i; if(rec_save_u[i]  ) cmd+='+'; else cmd+='-'; }
+    cmd_tx+=cmd;
+
+    // date de depart et pointers
+    trec=0;
+    rec_ind_cmd=0;
+    rec_ind_i=0;
+
+    // reset ancien detecteurs
+    rec_last_i = rec_last_last_i = -1;
+
+    // go
+    play=1;
+    log_rec_exe="";  //juste en dbg pr comprendre ce qui se passe, enlever en prod
+}
+
+function stop_play()
+{
+    play=0;
+    //alert(log_rec_exe);
+}
+
+var log_rec_exe="";
+function rec_exe()
+{
+    if(play==0) return;
+
+    var tcmd=0; var ti=0; var inok=0; var tinv=0;
+
+    if(a_rec_i.length==rec_ind_i) ti=10000000; else { ti=a_rec_i[rec_ind_i].time; inok=new_var[I + a_rec_i[rec_ind_i].i]; tinv=a_rec_i[rec_ind_i].time_inv; }
+    if(a_rec_cmd.length==rec_ind_cmd) { play=0; welcome_redraw(); return; } tcmd=a_rec_cmd[rec_ind_cmd].time;
+
+    log_rec_exe+="\n"
+    if(rec_ind_i<a_rec_i.length)
+    {
+        log_rec_exe+="wait_in="+a_rec_i[rec_ind_i].i+"="+inok+" at ti="+ti+" from t="+tinv+"\n";
+        welcome_msg = "t="+trec+" wait in"+a_rec_i[rec_ind_i].i+" at ti="+ti+" from t="+tinv; welcome_msg_dcpt = 20;
+    }
+    else
+    {
+        welcome_msg = "t="+trec+" no wait in"; welcome_msg_dcpt = 20;
+    }
+
+    if(trec > tinv) if(inok) { trec = ti; rec_ind_i++; log_rec_exe+="IN\n"; }
+    if(trec < ti) trec++;
+
+    log_rec_exe+= "ZE--> trec=" + trec + " tcmd=" + tcmd + " ind=" + rec_ind_cmd + "/" + a_rec_cmd.length+"\n";
+
+    while(tcmd<=trec)
+    {
+        var cmd=a_rec_cmd[rec_ind_cmd].cmd;
+        if(cmd_tx.length+cmd.length>=100) break; //pour ne pas surcharger la centrale, on enverra le reste au prochain tick
+        cmd_tx+=cmd;
+        log_rec_exe+="CMD=> " + a_rec_cmd[rec_ind_cmd].val +"\n"; //UU: voir si necessaire
+        rec_ind_cmd++;
+        if(a_rec_cmd.length==rec_ind_cmd) { play=0; welcome_redraw(); return; }
+        tcmd=a_rec_cmd[rec_ind_cmd].time;
+    }
+    //log_rec_exe+= "---\n";
+}
+
+// algo simple des debuts
+
+function simple_rec_in()
+{
+    for(var i=0; i<rec_nb_in; i++)
+    {
+        if(new_var[I + i]==0)
+        {
+            if(rec_state_in[i]<rec_in_nb_off) rec_state_in[i]++;
+        }
+        else
+        {
+            if(rec_state_in[i]<rec_in_nb_off) rec_state_in[i]=0;
+            else
+            {
+                rec_state_in[i]++;
+                if(rec_state_in[i]==(rec_in_nb_off+rec_in_nb_on))  //nb off puis nb on atteint
+                {
+                    if(rec)
+                    {
+                        a_rec_i.push(new TimeIn(cpt - cpt0 - rec_in_nb_on - 2, i, 0));
+                    }
+                    rec_state_in[i]=0;
+                    welcome_msg ="t="+(cpt-cpt0)+" DET_IN="+i; welcome_msg_dcpt = 20;
+                }
+            }
+        }
+    }
+}
+
+function simple_rec_exe()
+{
+    if(play==0) return;
+
+    var tcmd=0; var ti=0; var inok=0; var tinv=0;
+
+    if(a_rec_i.length==rec_ind_i) ti=10000000; else { ti=a_rec_i[rec_ind_i].time; inok=new_var[I + a_rec_i[rec_ind_i].i]; tinv=a_rec_i[rec_ind_i].time_inv; }
+    if(a_rec_cmd.length==rec_ind_cmd) { play=0; welcome_redraw(); return; } tcmd=a_rec_cmd[rec_ind_cmd].time;
+
+    log_rec_exe+="\n"
+    if(rec_ind_i<a_rec_i.length)
+    {
+        log_rec_exe+="wait_in="+a_rec_i[rec_ind_i].i+"="+inok+" at ti="+ti+" from t="+tinv+"\n";
+        welcome_msg = "t="+trec+" wait in"+a_rec_i[rec_ind_i].i+" at ti="+ti+" from t="+tinv; welcome_msg_dcpt = 20;
+    }
+    else
+    {
+        welcome_msg = "t="+trec+" no wait in"; welcome_msg_dcpt = 20;
+    }
+
+    if(inok) { trec = ti; rec_ind_i++; log_rec_exe+="IN\n"; }
+    if(trec < ti) trec++;
+
+    log_rec_exe+= "ZE--> trec=" + trec + " tcmd=" + tcmd + " ind=" + rec_ind_cmd + "/" + a_rec_cmd.length+"\n";
+
+    while(tcmd<=trec)
+    {
+        var cmd=a_rec_cmd[rec_ind_cmd].cmd;
+        if(cmd_tx.length+cmd.length>=100) break; //pour ne pas surcharger la centrale, on enverra le reste au prochain tick
+        cmd_tx+=cmd;
+        log_rec_exe+="CMD=> " + a_rec_cmd[rec_ind_cmd].val +"\n"; //UU: voir si necessaire
+        rec_ind_cmd++;
+        if(a_rec_cmd.length==rec_ind_cmd) { play=0; welcome_redraw(); return; }
+        tcmd=a_rec_cmd[rec_ind_cmd].time;
+    }
+    //log_rec_exe+= "---\n";
+}
+
+
+
+
+
+
+//========================================
+//  Partie "SCRIPTS"
+//========================================
+
+/*
+
+Les scripts permettent d'automatiser des sequences
+
+Les commandes suivantes sont disponibles:
+
+Commande         Description
+SCRIPT("nom");   nom et debut d'un nouveau script
+CMD("cmd");      envoie la commande la_commande_sans_espace (protocole d17)
+                    "a3s+v100f0+" // loco d'adresse 3, avant, vitesse 100%, f0 on
+                    "t2-t3^"      // aig2 directe, aig3 inverse
+                    "u0+u1-u2^"   // demander la mise à 1 de u0, mise a 0 de u1, invertion de u2
+                    "x10,2+"      // activation de la sortie 2 du decodeur d'accessoire d'adresse 10
+MSG("msg");      affiche le_message_sans_espace sur l'ecran du menu
+TEMPO(sec);      tempo fixe durée_en_s (min: .25, par pas de .25)
+TEMPOR(min,max); tempo aleatoire durée_mini_en_s durée_max_en_s
+WAIT("var");     attente de la variable
+                    "i0-95" pour les entrées,
+                    "u0-191" pour les variables u,
+                    "d0-47" pour aiguillage en position directe
+                    "e0-e7" pour aiguillage en position deviee
+                    rajouter ! devant la variable pour attendre qu'elle soit inactive
+END()            fin du script
+LOOP()           recommencer le script depuis le début
+//               commentaire
+
+
+// ex:
+
+//aller retour entre in1 et in2      in1   loco28            in2
+SCRIPT("Aller/Retour");
+// Aller
+MSG("depart aller");
+CMD("a28s+v20f0+");
+TEMPO(2.5);
+CMD("a28v50");
+WAIT("i2");
+CMD("a28v20");
+TEMPO(2);
+CMD("a28v0f0-");
+
+// attente variable
+TEMPOR(10,20);
+
+// Retour
+MSG("depart retour");
+CMD("a28s-v20f0+");
+TEMPO(2.5); CMD("a28v50");
+WAIT("i21");CMD("a28v20");
+TEMPO(2);   CMD("a28v0f0-");
+
+// attente variable
+TEMPOR(20,60);
+
+// on executec en boucle
+LOOP()
+
+*/
+
+//class Script
+function Script(_name, _ind)
+    {
+        this.name = _name;
+        this.ind_start = _ind;
+        this.ind = _ind;
+        this.running = 0;
+        this.dcpt = 0;
+        this.msg = "";
+    }
+var script_db = [];
+var script_cmd = []; var script_arg = []; var script_arg2 = [];
+
+function add_script_line(cmd, arg, arg2)
+{
+    script_cmd.push(cmd);
+    if(arguments.length>=2) script_arg.push(arg); else script_arg.push("");
+    if(arguments.length>=3) script_arg2.push(arg2); else script_arg2.push("");
+}
+
+function SCRIPT(name)
+{
+    add_script_line("X");   // ajout d'un END si le script precedent a oublie de le mettre
+    script_db.push(new Script(name, script_cmd.length));
+}
+
+function CMD(cmd)
+{
+    add_script_line("C", cmd);
+}
+
+function MSG(msg)
+{
+    add_script_line("M", msg);
+}
+
+function TEMPO(sec)
+{
+    add_script_line("T", ""+sec);
+}
+
+function TEMPOR(min,max)
+{
+    add_script_line("R", ""+min, ""+max);
+}
+
+function WAIT(variable)
+{
+    add_script_line("W", variable);
+}
+
+function LOOP()
+{
+    add_script_line("L");
+}
+
+function END()
+{
+    add_script_line("X");
+}
+
+function script_init()
+{
+    // ex: aller retour entre in1 et in2      in1   loco28            in2
+    SCRIPT("Aller/Retour");
+
+    // Aller
+    MSG("depart aller");
+    CMD("a28s+v20f0+");
+    TEMPO(2);
+    CMD("a28v50");
+    WAIT("i2");
+    CMD("a28v20");
+    TEMPO(2);
+    CMD("a28v0f0-");
+
+    // attente variable
+    TEMPOR(10,20);
+
+    // Retour
+    MSG("depart retour");
+    CMD("a28s-v20f0+");
+    TEMPO(2); CMD("a28v50");
+    WAIT("i21");CMD("a28v20");
+    TEMPO(2);   CMD("a28v0f0-");
+
+    // attente variable
+    TEMPOR(20,60);
+
+    // on executec en boucle
+    LOOP()
+
+    // script qui fait avancer la loco 3 pendant 10s pui attend entre 10 et 30s et recommence
+    SCRIPT("ZE SCRIPT A");
+    MSG("A1");
+    CMD("a28s+v20f0+");
+    TEMPO(10);
+    MSG("A2");
+    CMD("a28s+v0f0-");
+    TEMPOR(10,30);
+    LOOP()
+
+    // script qui fait avancer la loco 3 pendant 10s
+    SCRIPT("ZE SCRIPT B");
+    MSG("B");
+    CMD("a3s+v20f0+");
+    TEMPO(10);
+    CMD("a28s+v0f0-");
+    END()
+
+    // script qui fait faire a la 67000 @8 ets es 4 UIC le tour du reseau en partant et arrivant V2 G1.V2->PC->H->VR->T->V6A->G1.V2
+    SCRIPT("UIC B->B");
+    MSG("UIC 1");
+    CMD("t9/t2-t0/t1-t8/u10+u11+");
+    TEMPO(1); CMD("a8s-v0f0+");  MSG("UIC PHARES");// ne pas envoyer de cmd DCC avec les relais coupés
+    TEMPO(2); CMD("a8v15");      MSG("UIC START");
+    TEMPO(2);    CMD("a8v20");   MSG("UIC ACC");
+    WAIT("i11"); CMD("a8v30");   MSG("UIC Halte ACC");
+    WAIT("i3"); CMD("a8v20");    MSG("UIC Villa DEC");
+    TEMPO(4); CMD("a8v15");      MSG("UIC Viaduc 6 Arches DEC");
+    WAIT("i7");                  MSG("UIC V2 <<<");
+    WAIT("i8"); CMD("a8v10");    MSG("UIC V2 >>>");
+    TEMPO(9); CMD("a8v0");       MSG("UIC STOP");
+    TEMPO(5); CMD("a8f0-t9-t8-u10-u11-");  MSG("UIC END");
+    //MSG("fin UIC B->B");
+
+    /*
+    TEMPO(10);
+    MSG("XTER");
+    CMD("a1s-v5"); TEMPO(1); // passage en analogique
+    CMD("t9-t2-t0/t1-t8-u0+u8+u9+");
+    TEMPO(2); CMD("a1v40");      MSG("XTER START");
+    TEMPO(2);    CMD("a1v50");   MSG("XTER ACC");
+    WAIT("i11"); CMD("a1v70");   MSG("XTER Halte ACC");
+    WAIT("i3"); CMD("a1v60");    MSG("XTER Villa DEC");
+    TEMPO(4); CMD("a1v50");      MSG("XTER Viaduc 6 Arches DEC");
+    WAIT("i5");                  MSG("XTER V1 <<<");
+    WAIT("i6"); CMD("a1v40");    MSG("XTER V1 >>>");
+    TEMPO(2); CMD("a1v8");       MSG("XTER STOP");
+    TEMPO(5); CMD("t9-t8-u0-u8-u9-");  MSG("XTER END");
+    TEMPO(1); CMD("a0");   //on stop l'analogique
+    */
+
+    TEMPO(10);
+    MSG("X2200");
+    CMD("a1s+v0"); TEMPO(1); // passage en analogique
+    CMD("t8-t9-t2-t0/t1-u8+u9+");
+    TEMPO(2);    CMD("a1v40");   MSG("X2200 START");
+    TEMPO(3);    CMD("a1v85");   MSG("X2200 ACC");
+    WAIT("i12"); CMD("a1v60");   MSG("X2200 v.Rouzet");
+    WAIT("i11"); CMD("a1v50");   MSG("X2200 Halte");
+    TEMPO(3); CMD("a1v40");
+    TEMPO(3); CMD("a1v0");       MSG("X2200 Halte STOP");
+    TEMPOR(5,15); CMD("a1v60");   MSG("X2200 Halte START");
+    WAIT("i6"); CMD("a1v50");    MSG("X2200 V1 >>>");
+    WAIT("i5"); CMD("a1v40");    MSG("X2200 V1 <<<");
+    TEMPO(2); CMD("a1v0");       MSG("X2200 STOP");
+    TEMPO(2); CMD("t9-t8-u8-u9-");  MSG("X2200 END");
+    TEMPO(1); CMD("a0");   //on stop l'analogique
+
+    SCRIPT("X2200 seul");
+    MSG("X2200");
+    CMD("a1s+v0"); TEMPO(1); // passage en analogique
+    CMD("t8-t9-t2-t0/t1-u8+u9+");
+    TEMPO(2);    CMD("a1v40");   MSG("X2200 START");
+    TEMPO(3);    CMD("a1v85");   MSG("X2200 ACC");
+    WAIT("i12"); CMD("a1v60");   MSG("X2200 v.Rouzet");
+    WAIT("i11"); CMD("a1v50");   MSG("X2200 Halte");
+    TEMPO(3); CMD("a1v40");
+    TEMPO(3); CMD("a1v0");       MSG("X2200 Halte STOP");
+    TEMPOR(5,15); CMD("a1v60");   MSG("X2200 Halte START");
+    WAIT("i6"); CMD("a1v50");    MSG("X2200 V1 >>>");
+    WAIT("i5"); CMD("a1v40");    MSG("X2200 V1 <<<");
+    TEMPO(2); CMD("a1v0");       MSG("X2200 STOP");
+    TEMPO(2); CMD("t9-t8-u8-u9-");  MSG("X2200 END");
+    TEMPO(1); CMD("a0");   //on stop l'analogique
+}
+
+script_init();
+
+END(); // rajout END en fin pour la securité
+
+function randomIntMinMaxIncluded(min, max)
+{
+    min = Math.ceil(min);
+    max = Math.floor(max);
+    return Math.floor(Math.random() * (max - min +1)) + min;
+}
+
+welcome_msg = "";
+welcome_msg_dcpt = 0;
+function script_maj()  // doit etre appelle toute les 250ms
+{
+    for(var s=0; s<script_db.length; s++)
+    {
+        var scr=script_db[s]; //reference
+        if(scr.running == 0) continue;
+
+        if(scr.dcpt != 0)
+        {
+            scr.dcpt--;
+            if(scr.dcpt != 0) continue;
+            scr.ind++;
+        }
+
+        while(1)
+        {
+            var cmd = script_cmd[scr.ind];
+            var arg = script_arg[scr.ind];
+            var arg2= script_arg2[scr.ind];
+
+            if(cmd=="T")
+            {
+                var val = parseInt(arg,10); // sec
+                scr.dcpt = 4 * val; // 250ms
+                if(scr.dcpt == 0) { scr.ind++; continue; }
+                break;
+            }
+
+            if(cmd=="R")
+            {
+                var min = parseInt(arg,10);
+                var max = parseInt(arg2,10);
+                var val = randomIntMinMaxIncluded(min, max);
+                scr.dcpt = 4 * val;
+                if(scr.dcpt == 0) { scr.ind++; continue; }
+                break;
+            }
+
+            if(cmd == "M")
+            {
+                scr.msg = arg;
+                //alert(arg);
+                welcome_msg = arg; welcome_msg_dcpt = 20;
+                scr.ind++; continue;
+            }
+
+            if(cmd == "C")
+            {
+                cmd_tx += arg;
+                scr.ind++; continue;
+            }
+
+            if(cmd == "X")
+            {
+                scr.running = 0;
+                scr.msg = "";
+                scr.dcpt = 0;
+
+                var run=0;
+                for(var s=0; s<script_db.length; s++) if(script_db[s].running) run=1;
+                if(run==0) welcome_script_running(0);
+
+                break;
+            }
+
+            if(cmd == "L")
+            {
+                scr.ind = scr.ind_start; continue;
+            }
+
+            if(cmd == "W")
+            {
+                var name=arg;
+                if(arg[0]=='!') name=arg.substring(1);
+                var val = getVar(getVarNum(name));
+                if(arg[0]=='!') val^=1;
+                if(val) { scr.ind++; continue; }
+                break;
+            }
+
+        } // while(1)
+
+    } // for script_db
+} // script_maj()
+
+function start_script(num)
+{
+    if(num<0) return;
+    if(num>=script_db.length) return;
+
+    var scr=script_db[num];
+
+    scr.ind = scr.ind_start;
+    scr.msg = "";
+    scr.dcpt = 0;
+    scr.running = 1;
+
+    welcome_script_running(1);
+}
+
+function stop_script()
+{
+    for(var s=0; s<script_db.length; s++)
+    if(script_db[s].running)
+    {
+        script_db[s].running = 0;
+        script_db[s].msg = "";
+    }
+
+    welcome_script_running(0);
+}
+
+function send_d17_msg()
+{
+    var cmd = prompt("D17 msg ?\n\nex:\n  a1s+v0f3+ t3-t8/- u0+u8-u10^\n  x1,2+ y1,63\n  au0 au1\n  l127+c127+h127+ p47=100 s28=1500", "");
+    cmd_tx += cmd;
+}
+
+function script_temp_interface()
+{
+   var txt = "Script Cmd\n\n";
+   txt += "q = quitter\n";
+   txt += "s = stopper tous les scripts\n\n";
+   txt += "lancer script:\n";
+   for(var s=0; s<script_db.length; s++)
+   {
+       txt+=s;
+       var scr=script_db[s];
+       txt+=" = "+scr.name;
+       if(scr.running) txt+=" RUNNING";
+       if(scr.msg)     txt+=" MSG="+scr.msg;
+       if(scr.dcpt)    txt+=" DCPT="+scr.dcpt;
+       txt+="\n";
+   }
+
+   var cmd = prompt(txt, "");
+   if(cmd=='q') return;
+   if(cmd=='s') stop_script();
+   if(cmd=='m') send_d17_msg();
+   var num = parseInt(cmd,10); if(num>=0 && num<=(script_db.length-1)) start_script(num);
+}
+
+function msg_temp_interface()
+{
+   send_d17_msg();
+}
+
+
+
+
+
+
+//========================================
+//  Partie "PAGE D'ACCUEIL (MENU GENERAL)"
+//========================================
+
+var welcome_old_au = -1;
+var cpt_img = 0;
+if(typeof(Storage) !== "undefined") // localStorage and sessionStorage supported
+{
+    var val = localStorage.getItem('welcome_img_idx');
+    if(val!=null && val!="") cpt_img=parseInt(val);
+}
+var rec_step=0;
+var welcome_redraw_cpt = 0;
+
+function welcome_page()
+{
+    ecran = "TCO";   // page d'accueil considere comme TCO, cahnger cela dans le futur
+
+    scale(4,7);
+    add_fond(0, 0, 4, 7, color_fond, "", 0);
+
+    draw_text(1.5,0,"Menu D17", "#000000");
+    if(cpt_img>=img_db_accueil.length) cpt_img=0;
+    if(img_db_accueil.length!=0) draw_img_in_cell(img_db_accueil[cpt_img].img, 1.5, 0.8, 3.5, 1);
+
+    //if(aSouris[0].adr_G == 1) col = "#FFFF00"; else col = "#00FF00"
+    //if(aSouris[0].adr_G == 0) col = "#cccccc";
+    draw_rect(0, 2, 0.9, 0.9, "#cccccc", "#ffffff", souris_type, 'black');
+    draw_rect(1, 2, 0.9, 0.9, "#cccccc", "#ffffff", "Loco", 'black');
+    if(mode_ana && conn_ok) draw_rect(2, 2, 0.9, 0.9, "#FFFF00", "#ffffff", "Ana", 'black');
+    else if(mode_dcc && conn_ok) draw_rect(2, 2, 0.9, 0.9, "#00FF00", "#ffffff", "Dcc", 'black');
+    else draw_rect(2, 2, 0.9, 0.9, "#cccccc", "#ffffff", "A?D", 'black');
+    draw_rect(3, 2, 0.9, 0.9, "#cccccc", "#ffffff", "prgCV" , 'black');
+
+    draw_rect(0, 3, 0.9, 0.9, "#cccccc", "#ffffff", "Tcos", 'black');
+    draw_rect(1, 3, 0.9, 0.9, "#cccccc", "#ffffff", "Tco" + tco_btn  , 'black');
+    draw_rect(2, 3, 0.9, 0.9, "#cccccc", "#ffffff", "", 'black');
+    draw_rect(3, 3, 0.9, 0.9, "#cccccc", "#ffffff", "Edit" , 'black');
+
+    draw_rect(1.5, 4, 3.8, 1, color_fond, "#ffffff", "");
+
+    if(script_run) draw_rect(0, 5, 0.9, 0.9, "#00FF00", "#ffffff", "Script", 'black');
+    else           draw_rect(0, 5, 0.9, 0.9, "#cccccc", "#ffffff", "Script", 'black');
+    draw_rect(1, 5, 0.9, 0.9, "#cccccc", "#ffffff", "Msg" , 'black');
+    if(rec_step==0) draw_rect(2, 5, 0.9, 0.9, "#cccccc", "#ffffff", "Rec"  , 'black');
+    if(rec_step==1) draw_rect(2, 5, 0.9, 0.9, "#00FF00", "#ffffff", "Rec"  , 'black');
+    if(rec_step==2) draw_rect(2, 5, 0.9, 0.9, "#FFFF00", "#ffffff", "Rec"  , 'black');
+    if(play) draw_rect(3, 5, 0.9, 0.9, "#00FF00", "#ffffff", "Play" , 'black');
+    else     draw_rect(3, 5, 0.9, 0.9, "#cccccc", "#ffffff", "Play" , 'black');
+
+    if(au) col="#ff0000"; else col="#00ff00"; var txt = "AU";
+    if(conn_ok==0) { col="#cccccc"; txt="AU?"; }
+    draw_rect(0, 6, 0.9, 0.9, col, "#ffffff", txt, 'black') ;
+    if(conn_ok) col="#00ff00"; else col="#cccccc";
+    draw_rect(1, 6, 0.9, 0.9, col, "#ffffff", "Conn", 'black');
+    draw_rect(2, 6, 0.9, 0.9, "#cccccc", "#ffffff", "Admin" , 'black');
+    if(grotate) col="#ffff00"; else col="#cccccc";
+    draw_rect(3, 6, 0.9, 0.9, col, "#ffffff", "Rota", 'black');
+}
+
+var win_admin=0;
+var old_mode_dcc=-1;
+var old_mode_ana=-1;
+
+
+function welcome_notify_click(x, y)
+{
+    if(y == 1) { cpt_img++; if(cpt_img>=img_db_accueil.length) cpt_img=0;
+                 welcome_page();
+                 if(typeof(Storage) !== "undefined") localStorage.setItem('welcome_img_idx', ""+cpt_img); }
+    if(y==2 && x==0) { if(souris_type=="1x") souris_type="2x"; else if(souris_type=="2x") souris_type="3x"; else if(souris_type=="3x") souris_type="4x"; else souris_type="1x";
+                       welcome_page();
+                       if(typeof(Storage) !== "undefined") localStorage.setItem('souris_type', souris_type); }
+    if(y==2 && x==1) start_souris();
+    if(y==2 && x==2) { if(mode_dcc==0 && mode_ana==1) cmd_tx+="ad"; if(mode_dcc==1 && mode_ana==0) cmd_tx+="aa"; }      //UU: voitr plntage si appuie hors conn
+    if(y==2 && x==3) doProg();
+
+    if(y==3 && x==0) change_tco(0);
+    if(y==3 && x==1) change_tco(tco_btn);
+    if(y==3 && x==3) { edit_on^=1; var num = prompt("TCO a editer ?", ""); num = parseInt(num,10); change_tco(num); }
+
+    if(y==5 && x==0) script_temp_interface();
+    if(y==5 && x==1) msg_temp_interface();
+    if(y==5 && x==2) { rec_step++; if(rec_step==3) rec_step=0; if(rec_step==1) start_rec() ; else if(rec_step==2) stop_rec(); else remove_textarea(); /**/ welcome_page(); welcome_redraw_cpt=2; }
+    if(y==5 && x==3) { if(play) stop_play(); else start_play();     welcome_page(); }
+
+    if(y==6 && x==0) { if(au) cmd_tx+="au0"; else cmd_tx+="au1";    welcome_page(); }
+    if(y==6 && x==1) { if(conn_ok) disconnect_ws(); else connect_ws(); }
+    if(y==6 && x==2) win_admin=open("admin.html"); //close(win_admin);
+    if(y==6 && x==3) { grotate^=1; welcome_page(); }
+}
+
+function welcome_notify_rx()
+{
+    if(welcome_old_au!=au) { welcome_old_au = au; welcome_page(); }
+}
+
+var script_run = 0;
+function welcome_script_running(run)
+{
+    script_run = run;
+    welcome_redraw();
+}
+
+var old_txt = "";
+function welcome_notify_timer()
+{
+    if(ecran=="TCO" && tco==-1)
+    {
+        var txt = "";
+        if(welcome_msg_dcpt) { welcome_msg_dcpt--; txt=welcome_msg; }
+        if(old_txt != txt) draw_rect(1.5, 4, 3.8, 1, color_fond, "#ffffff", txt, 'red');
+        old_txt = txt;
+
+        if((old_mode_dcc!=mode_dcc) || (old_mode_ana!=mode_ana))
+        {
+            old_mode_dcc=mode_dcc; old_mode_ana=mode_ana;
+            welcome_page();
+        }
+
+        if(welcome_redraw_cpt)  // redessine apres un petit delay (pour etre sure d'etre full screen)
+        {
+            welcome_redraw_cpt--;
+            if(welcome_redraw_cpt==0)  welcome_page();
+        }
+    }
+}
+
+function welcome_redraw()
+{
+    if(ecran=="TCO" && tco==-1) welcome_page();
+}
+
+
+
+
+
+
+//========================================
+//  Partie "GESTION DES IMAGES"
+//========================================
+
+function draw_img_in_rect(img, xc, yc, dx, dy)
+{
+    var idx = img.width;
+    var idy = img.height;
+    var zx = dx/idx;
+    var zy = dy/idy;
+    var zoom = zx; if(zy<zx) zoom = zy;
+    dx = idx * zoom;
+    dy = idy * zoom;
+
+    context.drawImage(img, xc - dx/2, yc - dy/2, dx, dy);
+}
+
+function draw_img_in_rect_expand(img, xc, yc, dx, dy)
+{
+    context.drawImage(img, xc - dx/2, yc - dy/2, dx, dy);
+}
+
+function draw_img_in_cell(img, xcell, ycell, nbxcell, nbycell, expand, centre)
+{
+    if(arguments.length<6) expand = 0;
+    if(arguments.length<7) centre = 1;
+
+    if(centre==0) { xcell+=((nbxcell-1)/2); ycell+=((nbycell-1)/2); }
+
+    var xc = (xcell + .5) * case_dx;
+    var yc = (ycell + .5) * case_dy;
+    var dx = nbxcell * case_dx;
+    var dy = nbycell * case_dy;
+
+    if(expand==0) draw_img_in_rect(img, xc, yc, dx, dy);
+
+    else          draw_img_in_rect_expand(img, xc, yc, dx, dy);
+}
+
+function app_start()
+{
+   welcome_page();
+   timer = setInterval(handleTimer,250);
+}
+
+var timer = 0;
+var nb_img_loaded=0;
+var nb_img_err=0;
+
+var unknown_img = new Image();  // image qui sera affichée lorsqu'une image ne peut pas être chargée
+
+function unknown_img_loaded()
+{
+    for(var i=0; i<img_db.length; i++)
+        if(img_db[i].path!="")
+            if(!(img_db[i].img.complete && img_db[i].img.naturalHeight))
+                img_db[i].img = unknown_img;
+    
+    for(var i=0; i<img_db_accueil.length; i++)
+        if(img_db_accueil[i].path!="")
+            if(!(img_db_accueil[i].img.complete && img_db_accueil[i].img.naturalHeight))
+                img_db_accueil[i].img = unknown_img;
+
+    app_start();
+}
+
+function unknown_img_err()
+{
+   alert("Cannot load default image !");
+}
+
+function img_manage_end()
+{
+    if(nb_img_wanted != (nb_img_loaded + nb_img_err))  return;
+    
+    if(nb_img_err == 0) app_start();
+    else
+    {
+        unknown_img.onload = unknown_img_loaded;
+        unknown_img.onerror = unknown_img_err;
+        unknown_img.src = "carre_vert.png";
+    }
+}
+
+function img_loaded()
+{
+   nb_img_loaded++;
+   img_manage_end();
+   //app_start();
+   //welcome_msg = "D17: " + version; welcome_msg_dcpt = 20;
+}
+
+function img_err()
+{
+   nb_img_err++;
+   img_manage_end();
+}
+
+function make_img(path)
+{
+    var tmp_img = new Image();
+    tmp_img.onload = img_loaded;
+    tmp_img.onerror = img_err;
+    tmp_img.src = path;
+    return tmp_img;
+}
+
+var nb_img_wanted=0;
+var nb_img_or_name_loco_nb=0;
+
+//class ImgDB
+function ImgDB(name, adr, path)
+{
+    this.img = 0;
+    this.name = name;
+    this.adr = adr;
+    this.path = path;
+}
+var img_db = [];
+
+//class ImgDB
+function ImgDBaccueil(path)
+{
+    this.img = 0;
+    this.path = path;
+}
+var img_db_accueil = [];
+
+function add_img(path, name, adr)
+{
+    if(arguments.length<3) adr=-1;
+    
+    if(name!="" || adr>=0) 
+    {
+        nb_img_or_name_loco_nb++;
+        if(aff_souris_img_and_name==2) aff_souris_img_and_name=1;
+    }
+
+    img_db.push(new ImgDB(name, adr, path));
+}
+
+function add_img_accueil(path)
+{
+    img_db_accueil.push(new ImgDBaccueil(path));
+}
+
+function load_img()
+{
+    for(var i=0; i<img_db.length; i++)
+    {
+        //try  // avec le try-catch plante sur anciennes tablettes
+        //{
+            if(img_db[i].path!="")
+            {
+                nb_img_wanted++;
+                img_db[i].img = make_img(img_db[i].path);
+            }
+        //}
+        //catch   // en testant, impossible de catcher l'erreur
+        //{
+        //    alert("Cannot load img "+img_db[i].path);
+        //}
+    }
+    
+    for(var i=0; i<img_db_accueil.length; i++)
+    {
+        if(img_db_accueil[i].path!="")
+        {
+            nb_img_wanted++;
+            img_db_accueil[i].img = make_img(img_db_accueil[i].path);
+        }
+    }
+}
+
+function get_img_from_adr(adr)
+{
+    for(var i=0; i<img_db.length; i++) if(img_db[i].adr==adr) return img_db[i].img;
+    return 0;
+}
+
+function get_name_from_adr(adr)
+{
+    for(var i=0; i<img_db.length; i++) if(img_db[i].adr==adr) return img_db[i].name;
+    return "";
+}
+
+// mes analogiques (seule la première servira à l'affichage mais d'autres peuvent servir à la selection)
+add_img("img_y8000.gif"    , "ANALOG" ,  1); //celle qui sera affichée pour l'adresse 1
+//add_img("img_x2100.gif"    , "ANALOG" ,  1); //les autres peuvent servir pour la selection
+//add_img("img_x2800.gif"    , "ANALOG" ,  1); 
+//add_img("img_x72500.gif"   , "ANALOG" ,  1);
+//add_img("img_x73500.gif"   , "ANALOG" ,  1);
+//add_img("img_bb9300.gif"   , "ANALOG" ,  1);
+//add_img("img_bb67400.gif"  , "ANALOG" ,  1);
+
+// mes numeriques
+add_img("img_bb63000.gif"  , "BB63001", 10);
+add_img("img_bb66000.gif"  , "BB66001",  6);
+add_img("img_bb66000b.gif" , "BB66002",  7);
+add_img("img_bb67400.gif"  , "BB67400",  8);
+add_img("img_x4500.gif"    , "X4501"  , 12);
+add_img("img_x4900.gif"    , "X4901"  , 13);
+
+//add_img(""                 , "36000"  ,  36);  // ex: nom mais pas d'images
+//add_img("img_030tu.gif"    , "DEF"  ,  0);     // image pour les souris desactivees (je preffere ne rien mettre)
+//add_img("img_tgv.gif"      , "DEF"  ,  -2);    // image par defaut pour les locos sans image (je preffere ne rien mettre)
+//add_img("img_030tu.gif"    , "DEF");           // image qui servira à autre chose que pour les souris (ex pour tco)
+
+
+add_img_accueil("img_141r.gif");
+add_img_accueil("img_cc72000.gif");
+add_img_accueil("img_cc21000.gif");
+add_img_accueil("img_bb26000.gif");
+
+load_img();
+
+if(nb_img_wanted==0) app_start();
+
+
+
+
+
+
+//========================================
+//  Partie NOTES
+//========================================
+
+/*
+
+// EXEMPLE AVEC DES IMAGES
+
+var nb_img_loaded=0;
+function img_loaded()
+{
+   nb_img_loaded++;
+   if(nb_img_wanted != nb_img_loaded) return;
+   alert("Chargement fini !");
+
+   context.drawImage(monImage,120,40);
+   context.drawImage(monImage,120,80);
+   context.drawImage(monImage,160,40,40,40);
+   context.drawImage(monImage,0,0,10,10,200,40,40,40);
+
+   context.drawImage(monImage2,300,40);
+
+   context.drawImage(monImage3,300-monImage3.width/2,120-monImage3.height);
+
+   void ctx.drawImage(image, dx, dy);
+   void ctx.drawImage(image, dx, dy, dLargeur, dHauteur);
+   void ctx.drawImage(image, sx, sy, sLargeur, sHauteur, dx, dy, dLargeur, dHauteur);
+}
+
+function make_img(path)
+{
+    var tmp_img = new Image();
+    tmp_img.onload = img_loaded;
+    tmp_img.src = path;
+    return tmp_img;
+}
+
+var nb_img_wanted=3;
+var monImage  = make_img("carre_vert.png");
+var monImage2 = make_img("CC21000_1S_Orig_R.gif");
+var monImage3 = make_img("CC21000_1S_Orig_R.gif");
+
+*/
+
+
+
+/*
+    NOTES:
+
+On commence évidemment par créer une instance de l'objet Image :
+var monImage = new Image();
+
+Ensuite, on crée des fonctions qu'on associe aux différents évènements (tel que "chargement terminé") :
+// quand le chargement est terminé
+monImage.onload = function()
+{
+   alert("Chargement fini !");
+}
+
+Enfin, on indique l'adresse de l'image à l'aide de l'attribut src, ce qui aura pour effet de lancer son chargement :
+monImage.src = "http://www.mon-site.com/une-image.png";
+
+JavaScript syntax:	context.drawImage(img,x,y);
+Position the image on the canvas, and specify width and height of the image:
+
+JavaScript syntax:	context.drawImage(img,x,y,width,height);
+Clip the image and position the clipped part on the canvas:
+
+JavaScript syntax:	context.drawImage(img,sx,sy,swidth,sheight,x,y,width,height);
+
+
+    class Txt // Textes
+    {
+        constructor(_txt, _x, _y)
+        {
+            this.x = _x;
+            this.y = _y;
+            this.txt = _txt;
+        }
+    }
+    var atxt = [];
+
+    function rm_atxt()
+    {
+        while(atxt.length) atxt.pop();
+    }
+    rm_atxt();
+
+    function print_atxt()
+    {
+        for(var i=0; i<atxt.length; i++) console.log("x="+atxt[i].x+" y="+atxt[i].y+" t="+atxt[i].txt);
+    }
+
+    function add_atxt(txt, x, y)
+    {
+        atxt.push(new Txt(txt, x, y));
+    }
+
+    add_atxt("wazza",1,2);
+    add_atxt("wizzou",1,2);
+    print_atxt();
+
+    //str.charAt(i) is better from a compatibility perspective if IE6/IE7 compatibility is required.
+    //str[i]
+
+    // copie cdes objets par reference
+    // pour une vraie copie par exemple sur des tableaux:
+    // this.nvars1 = []; for(var i=0; i<_nvars1.length; i+=1) this.nvars1.push(nvars1[i]);
+    // this.nvars1 = []; while(_nvars1.length) this.nvars1.push(_nvars1.pop());  // vide aussi l'original
+
+*/
+
+/*
+    Manuel du tco web de D17
+
+    Le tco wed de D17 est un programe en javascript qui tourne dans une page web
+    et communique avec la centrale D17 par websocket.
+
+    Il affiche un des 10 TCO disponible. Chaque TCO est une grille composée de cellules sur lesquelles
+    on peut metrre des widgets (interupteurs, voyants, lignes...). Leur apparence (couleur ...)
+    depend de l'etat des entree, position des aiguillages et variablres u.
+    Il permet aussi d'envoyer des commandes à la centrale lorsque l'on clique ou touche une cellule.
+    Le protocole D17 qui est utilisé permet de modifier la position des aiguillages, les leds,
+    sorties et sorties pwm/servo de la centrades et envoyer des ordres aux decodeurs.
+    voir la doc sur le protocole D17 pour plus d'information
+
+    i0-95 -->       -->x<1-511>.<0-7>
+    d0-47 -->       -->y<1-2044>
+    e0-47 -->  TCO  -->l0-127,c0-127,h0-127
+    u0-95 <->       -->s0-47,p0-47
+    t0-95 <--       -->o0-5
+
+    ------------------
+
+    lorsque l'on veut modifier la position de l'aiguillage 0, on envoie la commande t0^ (t pout turnout=aiguillage en anglais)
+    si on veut le mettre en direct t0- et en dévié t0/
+    niveau centrale, la fonction suivante est appelée:
+
+    void user_notify_aig(byte num, byte cmd) // cmd=0=direct cmd=1=devie
+    {
+        // gerer vos aiguillages ici
+        if(num==0)
+        {
+            if(cmd==0) user_bas_acc_dec_tx(10,0,1);
+            if(cmd==1) user_bas_acc_dec_tx(10,1,1);
+        }
+
+        user_set_d_e(num, 1 - cmd, cmd);
+    }
+
+    A vous de gérer vos aiguillages qui peuvent être sur un décodeur, un servo de la centrale ...
+    Dans cette exemple l'aiguillage 0 est branché sur un décodeur d'accessoires basique d'adresse 10 sur les sorties 0 et 1
+    user_set_d_e(num, 1 - cmd, cmd); met à jour les variables d pour direct et d pour dévé que la centrale
+    envoie régulièrement au TCO afin qu'il les utilise  pour l'afficahge
+
+    Le même principe est utilisé pour les variables u
+
+    void user_notify_u(byte num, byte val)
+    {
+        // faites ce que vous voulez avec vos variables u
+        // ex:
+        //
+        // if(num==3) { user_led(63,val); }
+        //
+        // if(num==10 && val==1)
+        // {
+        //      if(user_get_u(11)==1) return;
+        //      if(user_get_u(12)==1) return;
+        //      user_notify_aig(1,0);
+        //      user_notify_aig(3,1);
+        //      user_notify_aig(5,0);
+        // }
+
+        user_set_u(num, val);
+    }
+    le premier test permet de mettre a jour la led 63
+    On aurait pu utiliser la commande l63 met dans ce cas les autres tco ne verraient pas le changement
+
+    le second test realise un itineraire simplement
+    u10 met l'aiguillage 1 en direct, 3 en dévié, 5 en direct
+    seulement si les itineraires incompatibles u11 et u12 ne sont pas formes
+
+    La dernière ligne met à jour la variable u qui est envoyé au tco afin qu'il les utilise  pour l'afficahge
+
+    Tous les tco de tous les appareils peuvent voire les entree i la position des aiguillages d,e et les variables u
+    par contre il n'y a aucun moyen de voir et partager les autres commandes
+
+    ------------------
+
+    Au niveau de tco web, il suffit d'ajouter des widgets dans les cellules des tco.
+
+    Cela se fait simplement dans les fonctions tco0_init() à tco10_init()
+    ex:
+
+    function tco6_init()
+    {
+        scale(20,10);
+        add_fond(0, 0, 20, 10, color_fond, color_grille);
+        add_cmd(0,0,"tco0");
+        draw_text(0,0,"ret");
+    }
+
+    la fonction scale demande la creation d'un tco de 20 cellules de large sur 10 cellules de haut
+    Le programme se debrouille pour ajuster la taille du tco à la taille de l'écran
+
+    add_fond(0, 0, 20, 5, color_fond, color_grille);
+    met un fond a partir de la cellule (0,0) (en haut a gauche) sur 20x5 cellule
+    le fond a la couleur color_fond (qui est une constante) et une grille
+    color_fond est definit au debut du fichier: var color_fond = '#ccffcc'; // vert pale
+    Pour les couleurs vous pouvez utiliser '#RRVVBB' avec RR=rouge, VV=vert, BB=bleue (0=0%, 10, 20, ... 80=50%, 90, A0, .. F0 .. FF=100%)
+    ex: '#FF0000" = rouge 100%, '#FFFF00' = jaune(rouge+vert) 100%
+
+    Les cellules sont reperees par 2 numeros qui commencent à 0.
+    Le premier est pour l'horiznatle, le second vertical
+    (0,0) = enhaut a gauche
+    (29,14) =enbas a droite pour un scale de (30,15)
+
+    add_cmd(0,0,"tco0");
+    envoie la commande tco0 lorsque l'on clique sur la cellule (0,0)
+    cette commande n'est pas envoye a la centrale mais change de tco
+
+    add_cmd(0,1,"t3^");
+    demande de changer la position de l'aiguillage3
+
+    add_cmd(10,2,"u5^");
+    demande de changer l'etat de la variable u5
+
+    Mais la plupart du temps, les commandes sont specifiees dans les widgets
+
+    function add_sel(x, y, txt, cmd, varStr, vert_on, col_off, col_on, col_border, col_bg, col_txt)
+    affiche un selecteur (bouton rotatif)
+    (x,y) = cellule
+    txt = text à afficher sous le selector
+    cmd = commande à envoyer lorsque l'on clique dessus, ex: "u0^"
+    varStr = variable utilisee pour l'affichagen ex: "u0"
+    vert_on: 1 = bouton vertival quand la variable est vraie, 0 = horizontal
+    col_off = couleur quand la variable est fausse
+    col_on = couleur quand la variable est vraie
+    col_border = couleur des bords
+    col_bg = couleur du fond surlequel est posé le bouton
+    vol_txt = couleur du texte
+
+    function add_bp(x, y, txt, cmd, varStr, col_off, col_on, col_border='black', col_txt='black')
+    ajoute un bouton poussoir
+
+    function add_voy(x, y, typeStr, dx, dy, varStr, col_off, col_on, col_border='black', txt="", col_txt='black')
+    ajoute un voyant
+    typeStr: 'o' rond, 'r' rectangle
+    dx,dy = taille en pixel
+
+    function add_feu(x, y, varStr, col_off, col_on, txt, col_txt, cible, col_cible)
+    ajoute un voyant de feu pour tco, comme voyant mais avec une cible
+    cible: 0=pas de cible  1-4=orientation
+
+    function add_line(x1, y1, x2, y2, size=1, col_off='black', list_svar1="", col1='black', list_svar2="", col2='black', list_svar3="", col3='black', isza=0)
+    ajoute une ligne
+    il est possible de chnager la couleur si une des variables des liste est vraie
+    col_off par defaut
+    col1 si une des variables de list_svar1 est vraie, ex: "u0,u2,u3"
+    col2                                  2
+    col3                                  3
+    si is_za=0   la couleur3  est la plus prioritaire
+    si is_za=1   la couleur3 est uniquement affiché s'il y a au moins une variable vraie dans les listes 1 et 2
+       cela est utilise pour les zones d'aiguillages des itineraires
+    col1 est souvent utilise pour les iti DA
+    col2 est souvent utilise pour les iti TP
+    col3 est souvent utilise pour les detections
+
+    function add_bmvu(x, y, col_fond, txt1, txt2, col_txt, u)
+    ajoute un bmvu
+    u est le numero de la premiere variable u utilisee.
+    8 variables sont utilises par boitier bmvu
+    comme ils vont par 2, il faut 16 variables u par canton bmvu
+    au niveau de la centrale, il faut activer les bmvu avec:
+    add_bmvu
+
+*/
+
+
+        // clean code from: http://bencentra.com/code/2014/12/05/html5-canvas-touch-events.html
+        // Set up mouse events for drawing
+        /*
+        var mousePos = { x:0, y:0 };
+        var lastPos = mousePos;
+        canvas.addEventListener("mousedown", function (e) {
+            drawing = true;
+            lastPos = getMousePos(canvas, e);
+        }, false);
+        canvas.addEventListener("mouseup", function (e) {
+            drawing = false;
+        }, false);
+        canvas.addEventListener("mousemove", function (e) {
+            mousePos = getMousePos(canvas, e);
+        }, false);
+        */
+
+        // Set up touch events for mobile, etc
+        /*
+        canvas.addEventListener("touchstart", function (e) {
+            //mousePos = getTouchPos(canvas, e);
+            var touch = e.touches[0];
+            var mouseEvent = new MouseEvent("mousedown", {
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            });
+            canvas.dispatchEvent(mouseEvent);
+        }, false);
+
+        canvas.addEventListener("touchend", function (e) {
+            var mouseEvent = new MouseEvent("mouseup", {});
+            canvas.dispatchEvent(mouseEvent);
+        }, false);
+
+        canvas.addEventListener("touchmove", function (e) {
+            var touch = e.touches[0];
+            //alert("touchmove");
+            var mouseEvent = new MouseEvent("mousemove", {
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            });
+            canvas.dispatchEvent(mouseEvent);
+        }, false);
+        */
+
+        // Prevent scrolling when touching the canvas
+        /*
+        document.body.addEventListener("touchstart", function (e) {
+            if (e.target == canvas) {
+                e.preventDefault();
+            }
+        }, false);
+
+        document.body.addEventListener("touchend", function (e) {
+            if (e.target == canvas) {
+                e.preventDefault();
+            }
+        }, false);
+
+        canvas.addEventListener("touchmove", function (e) {
+            if (e.target == canvas) {
+                e.preventDefault();
+            }
+        }, false);
+        */
+
+    /*
+        // Get the position of the mouse relative to the canvas
+        function getMousePos(canvasDom, mouseEvent) {
+            var rect = canvasDom.getBoundingClientRect();
+            return {
+                x: mouseEvent.clientX - rect.left,
+                y: mouseEvent.clientY - rect.top
+            };
+        }
+
+        // Get the position of a touch relative to the canvas
+        function getTouchPos(canvasDom, touchEvent) {
+            var rect = canvasDom.getBoundingClientRect();
+            return {
+                x: touchEvent.touches[0].clientX - rect.left,
+                y: touchEvent.touches[0].clientY - rect.top
+            };
+        }
+    */
+
+     </script>
+
+  </body>
+</html>
